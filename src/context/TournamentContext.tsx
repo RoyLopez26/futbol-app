@@ -109,29 +109,57 @@ export const TournamentProvider: React.FC<TournamentProviderProps> = ({ children
     
     dispatch({ type: 'SET_LOADING', payload: true });
     try {
-      await TournamentService.updateMatchResult(
-        state.tournament.id, 
-        matchId, 
-        result,
-        team1Score,
-        team2Score
-      );
-      const updatedTournament = await TournamentService.getTournament(state.tournament.id);
+      // Buscar el partido en las fechas para obtener el dateId
+      let dateId: string | null = null;
+      
+      if (state.tournament.dates) {
+        for (const date of state.tournament.dates) {
+          const match = date.matches.find(m => m.id === matchId);
+          if (match) {
+            dateId = date.id;
+            break;
+          }
+        }
+      }
+
+      if (dateId) {
+        // Usar el nuevo método para fechas específicas
+        await TournamentService.updateMatchResultInDate(
+          state.tournament.id,
+          dateId,
+          matchId,
+          result,
+          team1Score || 0,
+          team2Score || 0
+        );
+      } else {
+        // Usar el método legacy para compatibilidad
+        await TournamentService.updateMatchResult(
+          state.tournament.id, 
+          matchId, 
+          result,
+          team1Score,
+          team2Score
+        );
+      }
+      
+      const updatedTournament = await TournamentService.getTournamentWithDates(state.tournament.id);
       dispatch({ type: 'SET_TOURNAMENT', payload: updatedTournament });
     } catch (error) {
       dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : 'Unknown error' });
     }
   };
 
-  const loadTournament = async (tournamentId: string): Promise<void> => {
-    dispatch({ type: 'SET_LOADING', payload: true });
-    try {
-      const tournament = await TournamentService.getTournament(tournamentId);
-      dispatch({ type: 'SET_TOURNAMENT', payload: tournament });
-    } catch (error) {
-      dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : 'Unknown error' });
-    }
-  };
+  // Legacy loadTournament method - mantener para compatibilidad si es necesario
+  // const loadTournament = async (tournamentId: string): Promise<void> => {
+  //   dispatch({ type: 'SET_LOADING', payload: true });
+  //   try {
+  //     const tournament = await TournamentService.getTournament(tournamentId);
+  //     dispatch({ type: 'SET_TOURNAMENT', payload: tournament });
+  //   } catch (error) {
+  //     dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : 'Unknown error' });
+  //   }
+  // };
 
   const loadTournamentHistory = async (): Promise<void> => {
     // Si ya está cargando, no hacer nada

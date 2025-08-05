@@ -309,7 +309,7 @@ export class TournamentService {
 
       tournament.matches[matchIndex] = updatedMatch;
 
-      const updatedTeams = this.updateTeamStats(tournament.teams, updatedMatch, tournament.config);
+      const updatedTeams = this.updateTeamStats(tournament.teams || [], updatedMatch, tournament.config);
       
       const completedMatches = tournament.matches.filter(m => m.completed).length;
       const isComplete = completedMatches === tournament.totalRounds;
@@ -317,7 +317,7 @@ export class TournamentService {
       let status: TournamentStatus = tournament.status;
       let winner: string | undefined;
       let runners: string[] | undefined;
-      let completedAt: any = undefined;
+      let completedAt: object | undefined = undefined;
 
       if (isComplete) {
         const finalResult = this.determineFinalResult(updatedTeams, tournament.config);
@@ -332,7 +332,7 @@ export class TournamentService {
       const tournamentRef = ref(db, `tournaments/${tournamentId}`);
       
       // Preparar datos para actualizar (solo incluir valores que no sean undefined)
-      const updateData: any = {
+      const updateData: Record<string, unknown> = {
         matches: tournament.matches,
         teams: updatedTeams,
         currentMatch: Math.min(tournament.currentMatch + 1, tournament.totalRounds),
@@ -437,22 +437,32 @@ export class TournamentService {
       team2.goalDifference = (team2.goalsFor || 0) - (team2.goalsAgainst || 0);
     }
 
+    // Cálculo de puntos según el tipo de torneo
     switch (match.result) {
       case 'team1':
         team1.wins++;
-        team1.points += 3;
         team2.losses++;
+        if (config.type === 'points') {
+          team1.points += 3; // 3 puntos por victoria
+        }
+        // En sistema por victorias no se suman puntos, solo se cuenta la victoria
         break;
       case 'team2':
         team2.wins++;
-        team2.points += 3;
         team1.losses++;
+        if (config.type === 'points') {
+          team2.points += 3; // 3 puntos por victoria
+        }
+        // En sistema por victorias no se suman puntos, solo se cuenta la victoria
         break;
       case 'draw':
         team1.draws++;
-        team1.points += 1;
         team2.draws++;
-        team2.points += 1;
+        if (config.type === 'points') {
+          team1.points += 1; // 1 punto por empate
+          team2.points += 1; // 1 punto por empate
+        }
+        // En sistema por victorias, empates = 0 victorias (no se suma nada)
         break;
     }
 
@@ -582,7 +592,7 @@ export class TournamentService {
       tournament.currentMatch = tournament.matches.length;
 
       // Actualizar estadísticas de los equipos
-      const updatedTeams = this.updateTeamStats(tournament.teams, newMatch, tournament.config);
+      const updatedTeams = this.updateTeamStats(tournament.teams || [], newMatch, tournament.config);
       
       // Verificar si el torneo está completo (esto se puede personalizar según las reglas)
       const isComplete = false; // Por ahora dejamos que el usuario decida cuándo terminar
@@ -590,7 +600,7 @@ export class TournamentService {
       let status: TournamentStatus = tournament.status;
       let winner: string | undefined;
       let runners: string[] | undefined;
-      let completedAt: any = undefined;
+      let completedAt: object | undefined = undefined;
 
       // Solo determinar ganador si se marca como completo manualmente
       if (isComplete) {
@@ -606,7 +616,7 @@ export class TournamentService {
       const tournamentRef = ref(db, `tournaments/${tournamentId}`);
       
       // Preparar datos para actualizar (solo incluir valores que no sean undefined)
-      const updateData: any = {
+      const updateData: Record<string, unknown> = {
         matches: tournament.matches,
         teams: updatedTeams,
         currentMatch: tournament.currentMatch,
@@ -757,9 +767,10 @@ export class TournamentService {
       await set(newDateRef, dateData);
 
       // Actualizar equipos únicos del torneo
-      const allTeams = new Set([...tournament.teams.map(t => t.name), ...teams]);
+      const existingTeamNames = tournament.teams ? tournament.teams.map(t => t.name) : [];
+      const allTeams = new Set([...existingTeamNames, ...teams]);
       const updatedTeams: Team[] = Array.from(allTeams).map((teamName, index) => {
-        const existingTeam = tournament.teams.find(t => t.name === teamName);
+        const existingTeam = tournament.teams ? tournament.teams.find(t => t.name === teamName) : undefined;
         return existingTeam || {
           id: `team-${index + 1}`,
           name: teamName,
@@ -856,6 +867,7 @@ export class TournamentService {
       }
 
       // Crear nuevo partido
+      const currentMatches = dateData.matches || [];
       const newMatch: Match = {
         id: `match-${Date.now()}`,
         tournamentId,
@@ -863,14 +875,14 @@ export class TournamentService {
         team1,
         team2,
         completed: false,
-        round: dateData.matches.length + 1,
+        round: currentMatches.length + 1,
         team1Score: 0,
         team2Score: 0,
         isPlayoff: false
       };
 
       // Agregar partido a la fecha
-      const updatedMatches = [...dateData.matches, newMatch];
+      const updatedMatches = [...currentMatches, newMatch];
       
       await update(dateRef, {
         matches: updatedMatches,
@@ -899,7 +911,8 @@ export class TournamentService {
       const dateData = dateSnapshot.val() as TournamentDate;
       
       // Verificar que todos los partidos estén completados
-      const incompleteMatches = dateData.matches.filter(m => !m.completed);
+      const matches = dateData.matches || [];
+      const incompleteMatches = matches.filter(m => !m.completed);
       if (incompleteMatches.length > 0) {
         throw new Error(`Cannot close date: ${incompleteMatches.length} matches are still incomplete`);
       }
@@ -912,6 +925,83 @@ export class TournamentService {
       console.log('✅ Fecha cerrada exitosamente');
     } catch (error) {
       console.error('❌ Error closing tournament date:', error);
+      throw error;
+    }
+  }
+
+  // Actualizar resultado de partido en una fecha específica
+  static async updateMatchResultInDate(
+    tournamentId: string,
+    dateId: string,
+    matchId: string,
+    result: MatchResult,
+    team1Score: number = 0,
+    team2Score: number = 0
+  ): Promise<void> {
+    try {
+      console.log('🔄 Actualizando resultado del partido en fecha:', { 
+        tournamentId, dateId, matchId, result, team1Score, team2Score 
+      });
+      
+      // Obtener la fecha
+      const dateRef = ref(db, `tournament-dates/${tournamentId}/${dateId}`);
+      const dateSnapshot = await get(dateRef);
+      
+      if (!dateSnapshot.exists()) {
+        throw new Error('Tournament date not found');
+      }
+
+      const dateData = dateSnapshot.val() as TournamentDate;
+      
+      // Verificar que la fecha tenga partidos
+      if (!dateData.matches || !Array.isArray(dateData.matches)) {
+        throw new Error('No matches found in date');
+      }
+      
+      // Encontrar el partido en la fecha
+      const matchIndex = dateData.matches.findIndex(m => m.id === matchId);
+      if (matchIndex === -1) {
+        throw new Error('Match not found in date');
+      }
+
+      const match = dateData.matches[matchIndex];
+      const updatedMatch = {
+        ...match,
+        result,
+        completed: true,
+        completedAt: serverTimestamp(),
+        team1Score,
+        team2Score
+      };
+
+      // Actualizar el partido en la fecha
+      const updatedMatches = [...dateData.matches];
+      updatedMatches[matchIndex] = updatedMatch;
+      
+      const completedMatches = updatedMatches.filter(m => m.completed).length;
+
+      // Actualizar la fecha
+      await update(dateRef, {
+        matches: updatedMatches,
+        completedMatches
+      });
+
+      // Obtener el torneo y actualizar estadísticas globales
+      const tournament = await this.getTournament(tournamentId);
+      if (!tournament) throw new Error('Tournament not found');
+
+      // Actualizar estadísticas de equipos usando la configuración de la fecha
+      const updatedTeams = this.updateTeamStats(tournament.teams || [], updatedMatch, dateData.config);
+      
+      // Actualizar el torneo con las nuevas estadísticas
+      const tournamentRef = ref(db, `tournaments/${tournamentId}`);
+      await update(tournamentRef, {
+        teams: updatedTeams
+      });
+
+      console.log('✅ Resultado del partido actualizado en fecha específica');
+    } catch (error) {
+      console.error('❌ Error updating match result in date:', error);
       throw error;
     }
   }

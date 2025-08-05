@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useTournament } from '../context/TournamentContext';
-import type { TournamentConfig, TournamentDate } from '../types/tournament';
+import type { TournamentConfig, TournamentDate, Match } from '../types/tournament';
 
 interface TournamentDateManagerProps {
   tournamentId: string;
@@ -16,6 +16,10 @@ export const TournamentDateManager: React.FC<TournamentDateManagerProps> = ({
   const [newDateName, setNewDateName] = useState('');
   const [newDateTeams, setNewDateTeams] = useState<string[]>(['', '']);
   const [newDateType, setNewDateType] = useState<'points' | 'wins'>('points');
+  const [numBlocks, setNumBlocks] = useState(1);
+  const [editingMatch, setEditingMatch] = useState<string | null>(null);
+  const [team1Score, setTeam1Score] = useState<number>(0);
+  const [team2Score, setTeam2Score] = useState<number>(0);
 
   const addTeam = () => {
     if (newDateTeams.length < 16) {
@@ -76,13 +80,65 @@ export const TournamentDateManager: React.FC<TournamentDateManagerProps> = ({
     }
   };
 
-  const handleGenerateMatches = async (date: TournamentDate) => {
-    const teams = date.teams;
+  // Genera fixture round-robin (todos contra todos)
+  const generateRoundRobinMatches = (teams: string[], blockNumber: number = 1) => {
+    const matches: { team1: string; team2: string; block: number }[] = [];
+    
     for (let i = 0; i < teams.length; i++) {
       for (let j = i + 1; j < teams.length; j++) {
-        await addMatchToDate(tournamentId, date.id, teams[i], teams[j]);
+        matches.push({
+          team1: teams[i],
+          team2: teams[j],
+          block: blockNumber
+        });
       }
     }
+    
+    return matches;
+  };
+
+  const handleGenerateMatches = async (date: TournamentDate) => {
+    const teams = date.teams;
+    const allMatches = [];
+    
+    // Generar partidos para cada bloque
+    for (let block = 1; block <= numBlocks; block++) {
+      const blockMatches = generateRoundRobinMatches(teams, block);
+      allMatches.push(...blockMatches);
+    }
+    
+    // Crear todos los partidos
+    for (const match of allMatches) {
+      await addMatchToDate(tournamentId, date.id, match.team1, match.team2);
+    }
+  };
+
+  const handleScoreSubmit = async (match: Match) => {
+    if (team1Score < 0 || team2Score < 0) {
+      alert('Los goles no pueden ser negativos');
+      return;
+    }
+
+    let result: 'team1' | 'team2' | 'draw';
+    
+    if (team1Score > team2Score) {
+      result = 'team1';
+    } else if (team2Score > team1Score) {
+      result = 'team2';
+    } else {
+      result = 'draw';
+    }
+
+    await updateMatchResult(match.id, result, team1Score, team2Score);
+    setEditingMatch(null);
+    setTeam1Score(0);
+    setTeam2Score(0);
+  };
+
+  const startEditingMatch = (match: Match) => {
+    setEditingMatch(match.id);
+    setTeam1Score(match.team1Score || 0);
+    setTeam2Score(match.team2Score || 0);
   };
 
   return (
@@ -192,6 +248,26 @@ export const TournamentDateManager: React.FC<TournamentDateManagerProps> = ({
                       </div>
                     </div>
                   </label>
+                </div>
+              </div>
+
+              {/* Number of Blocks */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Número de Bloques (Rondas)
+                </label>
+                <div className="flex items-center space-x-4">
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    value={numBlocks}
+                    onChange={(e) => setNumBlocks(parseInt(e.target.value) || 1)}
+                    className="w-24 px-3 py-2 rounded-lg border-2 border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200"
+                  />
+                  <div className="text-sm text-gray-600">
+                    Cada bloque repite el mismo fixture (todos vs todos)
+                  </div>
                 </div>
               </div>
 
@@ -331,21 +407,139 @@ export const TournamentDateManager: React.FC<TournamentDateManagerProps> = ({
                     </div>
                   </div>
 
+                  {/* Matches */}
+                  {date.matches && date.matches.length > 0 && (
+                    <div className="mb-4">
+                      <h4 className="font-semibold text-gray-700 mb-3 flex items-center">
+                        ⚽ Partidos ({date.completedMatches}/{date.totalMatches} completados)
+                      </h4>
+                      <div className="space-y-3 max-h-80 overflow-y-auto bg-gray-50 p-4 rounded-lg">
+                        {date.matches.map((match) => (
+                          <div
+                            key={match.id}
+                            className={`flex items-center justify-between p-3 rounded-lg border ${
+                              match.completed 
+                                ? 'bg-green-50 border-green-200' 
+                                : 'bg-gray-50 border-gray-200'
+                            }`}
+                          >
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between">
+                                <div className="text-sm font-bold text-gray-800">
+                                  {match.team1} 🆚 {match.team2}
+                                </div>
+                                {match.completed && (
+                                  <div className="text-lg font-bold text-green-600 bg-green-100 px-3 py-1 rounded-full">
+                                    {match.team1Score} - {match.team2Score}
+                                  </div>
+                                )}
+                              </div>
+                              {match.completed && (
+                                <div className="text-xs text-gray-500 mt-1">
+                                  Ganador: {
+                                    match.result === 'team1' ? match.team1 : 
+                                    match.result === 'team2' ? match.team2 : 'Empate'
+                                  }
+                                </div>
+                              )}
+                            </div>
+                            
+                            {!date.closed && (
+                              <div className="flex items-center space-x-2">
+                                {editingMatch === match.id ? (
+                                  <div className="flex flex-col space-y-2 bg-blue-50 p-3 rounded-lg border-2 border-blue-200">
+                                    <div className="text-xs font-medium text-blue-800 text-center mb-1">
+                                      Anotar Goles
+                                    </div>
+                                    <div className="flex items-center space-x-3">
+                                      <div className="text-center">
+                                        <div className="text-xs text-gray-600 mb-1">{match.team1}</div>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          max="20"
+                                          value={team1Score}
+                                          onChange={(e) => setTeam1Score(parseInt(e.target.value) || 0)}
+                                          className="w-16 px-2 py-2 text-center text-lg font-bold rounded-lg border-2 border-gray-300 focus:border-blue-500 focus:outline-none"
+                                          placeholder="0"
+                                        />
+                                      </div>
+                                      <div className="text-2xl font-bold text-gray-400">-</div>
+                                      <div className="text-center">
+                                        <div className="text-xs text-gray-600 mb-1">{match.team2}</div>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          max="20"
+                                          value={team2Score}
+                                          onChange={(e) => setTeam2Score(parseInt(e.target.value) || 0)}
+                                          className="w-16 px-2 py-2 text-center text-lg font-bold rounded-lg border-2 border-gray-300 focus:border-blue-500 focus:outline-none"
+                                          placeholder="0"
+                                        />
+                                      </div>
+                                    </div>
+                                    <div className="flex space-x-2">
+                                      <button
+                                        onClick={() => handleScoreSubmit(match)}
+                                        className="flex-1 px-4 py-2 bg-green-500 text-white font-medium rounded-lg hover:bg-green-600 transition-colors"
+                                      >
+                                        ✅ Guardar
+                                      </button>
+                                      <button
+                                        onClick={() => setEditingMatch(null)}
+                                        className="px-4 py-2 bg-gray-500 text-white font-medium rounded-lg hover:bg-gray-600 transition-colors"
+                                      >
+                                        ❌ Cancelar
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => startEditingMatch(match)}
+                                    className={`px-4 py-2 font-medium rounded-lg transition-colors shadow-sm ${
+                                      match.completed
+                                        ? 'bg-yellow-500 text-white hover:bg-yellow-600'
+                                        : 'bg-blue-500 text-white hover:bg-blue-600'
+                                    }`}
+                                  >
+                                    {match.completed ? '✏️ Editar' : '⚽ Anotar'}
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Actions */}
                   {!date.closed && (
                     <div className="flex space-x-3">
-                      <button
-                        onClick={() => handleGenerateMatches(date)}
-                        className="flex-1 bg-blue-500 text-white font-medium py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors"
-                      >
-                        Generar Partidos
-                      </button>
+                      {(!date.matches || date.matches.length === 0) ? (
+                        <button
+                          onClick={() => handleGenerateMatches(date)}
+                          className="flex-1 bg-blue-500 text-white font-medium py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors"
+                        >
+                          🎯 Generar Partidos
+                        </button>
+                      ) : (
+                        <div className="flex-1 text-center py-2 px-4 bg-green-100 text-green-800 rounded-lg font-medium">
+                          ✅ {date.totalMatches} Partidos Listos
+                        </div>
+                      )}
                       <button
                         onClick={() => handleCloseDate(date.id, date.name)}
                         className="bg-orange-500 text-white font-medium py-2 px-4 rounded-lg hover:bg-orange-600 transition-colors"
                       >
-                        Cerrar Fecha
+                        🔒 Cerrar Fecha
                       </button>
+                    </div>
+                  )}
+                  
+                  {date.closed && (
+                    <div className="text-center py-2 px-4 bg-gray-100 text-gray-600 rounded-lg font-medium">
+                      🔒 Fecha Cerrada - No se pueden hacer cambios
                     </div>
                   )}
                 </div>

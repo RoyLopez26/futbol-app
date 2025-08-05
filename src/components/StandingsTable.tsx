@@ -50,7 +50,9 @@ export const StandingsTable: React.FC = () => {
                 <th className="border border-gray-300 px-4 py-2 text-center">GF</th>
                 <th className="border border-gray-300 px-4 py-2 text-center">GC</th>
                 <th className="border border-gray-300 px-4 py-2 text-center">DG</th>
-                <th className="border border-gray-300 px-4 py-2 text-center font-bold">Pts</th>
+                <th className="border border-gray-300 px-4 py-2 text-center font-bold">
+                  {tournament.config.type === 'points' ? 'Pts' : 'Victorias'}
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -96,7 +98,7 @@ export const StandingsTable: React.FC = () => {
                   </td>
                   <td className="border border-gray-300 px-4 py-3 text-center">
                     <span className="font-bold text-green-500 text-lg">
-                      {team.points}
+                      {tournament.config.type === 'points' ? team.points : team.wins}
                     </span>
                   </td>
                 </tr>
@@ -114,7 +116,7 @@ export const StandingsTable: React.FC = () => {
             <div><strong>GF:</strong> Goles a Favor</div>
             <div><strong>GC:</strong> Goles en Contra</div>
             <div><strong>DG:</strong> Diferencia de Goles</div>
-            <div><strong>Pts:</strong> Puntos</div>
+            <div><strong>{tournament.config.type === 'points' ? 'Pts:' : 'Victorias:'}</strong> {tournament.config.type === 'points' ? 'Puntos (3 por victoria, 1 por empate)' : 'Solo cuentan las victorias'}</div>
           </div>
         </div>
 
