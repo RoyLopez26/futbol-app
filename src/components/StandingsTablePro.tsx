@@ -1,11 +1,109 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useTournament } from '../context/TournamentContext';
 import type { Team } from '../types/tournament';
 
-export const StandingsTablePro: React.FC = () => {
-  const { tournament } = useTournament();
+interface StandingsTableProProps {
+  selectedDateId?: string;
+}
 
-  if (!tournament || !tournament.teams) return null;
+export const StandingsTablePro: React.FC<StandingsTableProProps> = ({ selectedDateId }) => {
+  const { tournament } = useTournament();
+  
+  if (!tournament) return null;
+
+  // Calcular estadísticas para la fecha específica
+  const dateSpecificStats = useMemo(() => {
+    if (!selectedDateId || !tournament.dates) {
+      return tournament.teams || [];
+    }
+
+    const selectedDate = tournament.dates.find(date => date.id === selectedDateId);
+    if (!selectedDate) return tournament.teams || [];
+
+    // Crear equipos base con estadísticas resetadas
+    const teamsInDate = selectedDate.teams.map(teamName => ({
+      id: `team-${teamName}`,
+      name: teamName,
+      points: 0,
+      wins: 0,
+      draws: 0,
+      losses: 0,
+      matchesPlayed: 0,
+      goalsFor: 0,
+      goalsAgainst: 0,
+      goalDifference: 0
+    }));
+
+    // Calcular estadísticas basándose solo en los matches de esta fecha
+    const dateMatches = selectedDate.matches || [];
+    
+    for (const match of dateMatches) {
+      if (!match.completed) continue;
+
+      const team1 = teamsInDate.find(t => t.name === match.team1);
+      const team2 = teamsInDate.find(t => t.name === match.team2);
+
+      if (!team1 || !team2) continue;
+
+      // Incrementar partidos jugados
+      team1.matchesPlayed++;
+      team2.matchesPlayed++;
+
+      // Actualizar goles
+      if (match.team1Score !== undefined && match.team2Score !== undefined) {
+        team1.goalsFor += match.team1Score;
+        team1.goalsAgainst += match.team2Score;
+        team2.goalsFor += match.team2Score;
+        team2.goalsAgainst += match.team1Score;
+
+        team1.goalDifference = team1.goalsFor - team1.goalsAgainst;
+        team2.goalDifference = team2.goalsFor - team2.goalsAgainst;
+      }
+
+      // Actualizar victorias, empates, derrotas y puntos
+      switch (match.result) {
+        case 'team1':
+          team1.wins++;
+          team2.losses++;
+          if (selectedDate.config.type === 'points') {
+            team1.points += 3;
+          }
+          break;
+        case 'team2':
+          team2.wins++;
+          team1.losses++;
+          if (selectedDate.config.type === 'points') {
+            team2.points += 3;
+          }
+          break;
+        case 'draw':
+          team1.draws++;
+          team2.draws++;
+          if (selectedDate.config.type === 'points') {
+            team1.points += 1;
+            team2.points += 1;
+          }
+          break;
+      }
+    }
+
+    // Ordenar equipos según el tipo de torneo
+    return teamsInDate.sort((a, b) => {
+      if (selectedDate.config.type === 'points') {
+        if (b.points !== a.points) return b.points - a.points;
+        if (b.goalDifference !== a.goalDifference) return b.goalDifference - a.goalDifference;
+        return b.goalsFor - a.goalsFor;
+      } else {
+        if (b.wins !== a.wins) return b.wins - a.wins;
+        if (b.goalDifference !== a.goalDifference) return b.goalDifference - a.goalDifference;
+        return b.goalsFor - a.goalsFor;
+      }
+    });
+  }, [tournament, selectedDateId]);
+
+  const currentDate = selectedDateId && tournament.dates 
+    ? tournament.dates.find(d => d.id === selectedDateId) 
+    : null;
 
   const getPositionIcon = (position: number): string => {
     switch (position) {
@@ -47,7 +145,7 @@ export const StandingsTablePro: React.FC = () => {
             Tabla de Posiciones
           </h1>
           <p className="text-xl text-gray-600">
-            {tournament.name} • {tournament.config.type === 'points' ? 'Por Puntos' : 'Por Victorias'}
+            {tournament.name} • {currentDate ? currentDate.name : 'General'} • {currentDate ? (currentDate.config.type === 'points' ? 'Por Puntos' : 'Por Victorias') : (tournament.config?.type === 'points' ? 'Por Puntos' : 'Por Victorias')}
           </p>
         </div>
 
@@ -58,23 +156,36 @@ export const StandingsTablePro: React.FC = () => {
               <div className="flex items-center space-x-4">
                 <div className="text-2xl">📊</div>
                 <div>
-                  <h3 className="text-lg font-bold text-gray-800">Estado del Torneo</h3>
+                  <h3 className="text-lg font-bold text-gray-800">
+                    Estado de {currentDate ? currentDate.name : 'Torneo General'}
+                  </h3>
                   <p className="text-gray-600">
-                    {tournament.matches.filter(m => m.completed).length} de {tournament.matches.length} partidos completados
+                    {currentDate 
+                      ? `${currentDate.completedMatches || 0} de ${currentDate.totalMatches || 0} partidos completados`
+                      : `${tournament.matches?.filter(m => m.completed).length || 0} de ${tournament.matches?.length || 0} partidos completados`
+                    }
                   </p>
                 </div>
               </div>
               <div className="text-right">
                 <div className="text-sm text-gray-500">Progreso</div>
                 <div className="text-2xl font-bold text-green-600">
-                  {Math.round((tournament.matches.filter(m => m.completed).length / tournament.matches.length) * 100)}%
+                  {currentDate 
+                    ? Math.round(((currentDate.completedMatches || 0) / (currentDate.totalMatches || 1)) * 100)
+                    : Math.round(((tournament.matches?.filter(m => m.completed).length || 0) / (tournament.matches?.length || 1)) * 100)
+                  }%
                 </div>
               </div>
             </div>
             <div className="mt-4 w-full bg-gray-200 rounded-full h-2">
               <div 
                 className="bg-gradient-to-r from-green-500 to-blue-500 h-2 rounded-full transition-all duration-500"
-                style={{ width: `${(tournament.matches.filter(m => m.completed).length / tournament.matches.length) * 100}%` }}
+                style={{ 
+                  width: `${currentDate 
+                    ? ((currentDate.completedMatches || 0) / (currentDate.totalMatches || 1)) * 100
+                    : ((tournament.matches?.filter(m => m.completed).length || 0) / (tournament.matches?.length || 1)) * 100
+                  }%` 
+                }}
               />
             </div>
           </div>
@@ -103,12 +214,12 @@ export const StandingsTablePro: React.FC = () => {
                   <th className="px-6 py-4 text-center text-sm font-bold text-gray-700">GC</th>
                   <th className="px-6 py-4 text-center text-sm font-bold text-gray-700">DG</th>
                   <th className="px-6 py-4 text-center text-sm font-bold text-gray-700">
-                    {tournament.config.type === 'points' ? 'Pts' : 'V'}
+                    {currentDate ? (currentDate.config.type === 'points' ? 'Pts' : 'V') : (tournament.config?.type === 'points' ? 'Pts' : 'V')}
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {tournament.teams.map((team: Team, index: number) => (
+                {dateSpecificStats.map((team: Team, index: number) => (
                   <tr
                     key={team.id}
                     className={`border-b border-gray-200 hover:bg-gray-50 transition-colors ${getRowStyle(index + 1)}`}
@@ -164,7 +275,7 @@ export const StandingsTablePro: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 text-center">
                       <div className="text-2xl font-bold text-blue-600">
-                        {tournament.config.type === 'points' ? team.points : team.wins}
+                        {currentDate ? (currentDate.config.type === 'points' ? team.points : team.wins) : (tournament.config?.type === 'points' ? team.points : team.wins)}
                       </div>
                     </td>
                   </tr>
@@ -183,7 +294,7 @@ export const StandingsTablePro: React.FC = () => {
               <div><strong>GF:</strong> Goles a Favor</div>
               <div><strong>GC:</strong> Goles en Contra</div>
               <div><strong>DG:</strong> Diferencia de Goles</div>
-              <div><strong>{tournament.config.type === 'points' ? 'Pts' : 'V'}:</strong> {tournament.config.type === 'points' ? 'Puntos' : 'Victorias'}</div>
+              <div><strong>{currentDate ? (currentDate.config.type === 'points' ? 'Pts' : 'V') : (tournament.config?.type === 'points' ? 'Pts' : 'V')}:</strong> {currentDate ? (currentDate.config.type === 'points' ? 'Puntos' : 'Victorias') : (tournament.config?.type === 'points' ? 'Puntos' : 'Victorias')}</div>
             </div>
           </div>
         </div>
@@ -194,7 +305,7 @@ export const StandingsTablePro: React.FC = () => {
             <div className="text-6xl mb-4">🎉</div>
             <h2 className="text-3xl font-bold text-white mb-4">¡Torneo Completado!</h2>
             <div className="text-xl text-green-100 mb-4">
-              🏆 Campeón: {tournament.winner || tournament.teams[0].name}
+              🏆 Campeón: {tournament.winner || dateSpecificStats[0]?.name}
             </div>
             {tournament.runners && tournament.runners.length > 0 && (
               <div className="text-lg text-green-200">
@@ -211,12 +322,18 @@ export const StandingsTablePro: React.FC = () => {
               <div>
                 <p className="text-sm text-gray-600">Máximo Goleador</p>
                 <p className="text-lg font-bold text-green-600">
-                  {tournament.teams.reduce((prev, current) => 
-                    (prev.goalsFor || 0) > (current.goalsFor || 0) ? prev : current
-                  ).name}
+                  {dateSpecificStats.length > 0 
+                    ? dateSpecificStats.reduce((prev, current) => 
+                        (prev.goalsFor || 0) > (current.goalsFor || 0) ? prev : current
+                      ).name
+                    : 'N/A'
+                  }
                 </p>
                 <p className="text-sm text-gray-500">
-                  {Math.max(...tournament.teams.map(t => t.goalsFor || 0))} goles
+                  {dateSpecificStats.length > 0 
+                    ? Math.max(...dateSpecificStats.map(t => t.goalsFor || 0))
+                    : 0
+                  } goles
                 </p>
               </div>
               <div className="text-3xl">⚽</div>
@@ -228,12 +345,18 @@ export const StandingsTablePro: React.FC = () => {
               <div>
                 <p className="text-sm text-gray-600">Mejor Defensa</p>
                 <p className="text-lg font-bold text-blue-600">
-                  {tournament.teams.reduce((prev, current) => 
-                    (prev.goalsAgainst || 0) < (current.goalsAgainst || 0) ? prev : current
-                  ).name}
+                  {dateSpecificStats.length > 0 
+                    ? dateSpecificStats.reduce((prev, current) => 
+                        (prev.goalsAgainst || 0) < (current.goalsAgainst || 0) ? prev : current
+                      ).name
+                    : 'N/A'
+                  }
                 </p>
                 <p className="text-sm text-gray-500">
-                  {Math.min(...tournament.teams.map(t => t.goalsAgainst || 0))} goles en contra
+                  {dateSpecificStats.length > 0 
+                    ? Math.min(...dateSpecificStats.map(t => t.goalsAgainst || 0))
+                    : 0
+                  } goles en contra
                 </p>
               </div>
               <div className="text-3xl">🛡️</div>
@@ -245,12 +368,18 @@ export const StandingsTablePro: React.FC = () => {
               <div>
                 <p className="text-sm text-gray-600">Más Partidos</p>
                 <p className="text-lg font-bold text-purple-600">
-                  {tournament.teams.reduce((prev, current) => 
-                    prev.matchesPlayed > current.matchesPlayed ? prev : current
-                  ).name}
+                  {dateSpecificStats.length > 0 
+                    ? dateSpecificStats.reduce((prev, current) => 
+                        prev.matchesPlayed > current.matchesPlayed ? prev : current
+                      ).name
+                    : 'N/A'
+                  }
                 </p>
                 <p className="text-sm text-gray-500">
-                  {Math.max(...tournament.teams.map(t => t.matchesPlayed))} partidos
+                  {dateSpecificStats.length > 0 
+                    ? Math.max(...dateSpecificStats.map(t => t.matchesPlayed))
+                    : 0
+                  } partidos
                 </p>
               </div>
               <div className="text-3xl">🏟️</div>

@@ -24,6 +24,8 @@ export interface Match {
   completed: boolean;
   completedAt?: FirebaseTimestamp;
   round: number;
+  block?: number; // Número de bloque/ronda (1, 2, 3, etc.)
+  locked?: boolean; // Si el partido está bloqueado para edición
   team1Score?: number;
   team2Score?: number;
   isPlayoff?: boolean; // Para partidos de desempate
@@ -176,6 +178,8 @@ export interface TournamentContextType {
   
   // Match management for dates
   addMatchToDate: (tournamentId: string, dateId: string, team1: string, team2: string) => Promise<void>;
+  addMatchToDateWithBlock: (tournamentId: string, dateId: string, team1: string, team2: string, block: number) => Promise<void>;
+  lockMatchesInDate: (tournamentId: string, dateId: string, matchIds: string[]) => Promise<void>;
   updateMatchResult: (matchId: string, result: MatchResult, team1Score?: number, team2Score?: number) => Promise<void>;
   
   // Legacy methods for compatibility

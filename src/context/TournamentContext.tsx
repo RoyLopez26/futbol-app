@@ -355,6 +355,42 @@ export const TournamentProvider: React.FC<TournamentProviderProps> = ({ children
     }
   };
 
+  const addMatchToDateWithBlock = async (
+    tournamentId: string, 
+    dateId: string, 
+    team1: string, 
+    team2: string,
+    block: number
+  ): Promise<void> => {
+    console.log('🎯 Context: Agregando partido con bloque a fecha', { tournamentId, dateId, team1, team2, block });
+    dispatch({ type: 'SET_LOADING', payload: true });
+    try {
+      await TournamentService.addMatchToDateWithBlock(tournamentId, dateId, team1, team2, block);
+      const updatedTournament = await TournamentService.getTournamentWithDates(tournamentId);
+      dispatch({ type: 'SET_TOURNAMENT', payload: updatedTournament });
+    } catch (error) {
+      console.error('❌ Context: Error agregando partido con bloque a fecha:', error);
+      dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  };
+
+  const lockMatchesInDate = async (
+    tournamentId: string,
+    dateId: string,
+    matchIds: string[]
+  ): Promise<void> => {
+    console.log('🔒 Context: Bloqueando partidos en fecha', { tournamentId, dateId, matchIds });
+    dispatch({ type: 'SET_LOADING', payload: true });
+    try {
+      await TournamentService.lockMatchesInDate(tournamentId, dateId, matchIds);
+      const updatedTournament = await TournamentService.getTournamentWithDates(tournamentId);
+      dispatch({ type: 'SET_TOURNAMENT', payload: updatedTournament });
+    } catch (error) {
+      console.error('❌ Context: Error bloqueando partidos:', error);
+      dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  };
+
   // Actualizar loadTournament para usar el nuevo método con fechas
   const loadTournamentWithDates = async (tournamentId: string): Promise<void> => {
     dispatch({ type: 'SET_LOADING', payload: true });
@@ -386,6 +422,8 @@ export const TournamentProvider: React.FC<TournamentProviderProps> = ({ children
     
     // Match management for dates
     addMatchToDate,
+    addMatchToDateWithBlock,
+    lockMatchesInDate,
     updateMatchResult,
     
     // Legacy methods for compatibility

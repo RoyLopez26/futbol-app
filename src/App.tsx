@@ -1,19 +1,67 @@
 import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import { TournamentProvider, useTournament } from './context/TournamentContext';
 import { Header } from './components/Header';
 import { TournamentSetup } from './components/TournamentSetup';
 import { BasicTournamentSetup } from './components/BasicTournamentSetup';
 import { TournamentDateManager } from './components/TournamentDateManager';
 import { TournamentHistory } from './components/TournamentHistory';
-import { ManualMatchManagement } from './components/ManualMatchManagement';
 import { StandingsTablePro } from './components/StandingsTablePro';
 import { MatchHistory } from './components/MatchHistory';
 
 type ViewType = 'setup' | 'basic-setup' | 'dates' | 'matches' | 'standings' | 'history' | 'tournaments';
 
+// Componente para manejar torneo específico
+const TournamentRoute: React.FC<{ view: ViewType }> = ({ view }) => {
+  const { tournamentId, dateId } = useParams<{ tournamentId: string; dateId?: string }>();
+  const { tournament, loadTournament } = useTournament();
+
+  useEffect(() => {
+    if (tournamentId && (!tournament || tournament.id !== tournamentId)) {
+      loadTournament(tournamentId);
+    }
+  }, [tournamentId, tournament, loadTournament]);
+
+  if (!tournament) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin w-16 h-16 border-4 border-green-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-xl text-gray-600">Cargando torneo...</p>
+        </div>
+      </div>
+    );
+  }
+
+  switch (view) {
+    case 'dates':
+      return <TournamentDateManager tournamentId={tournament.id} dates={tournament.dates || []} />;
+    case 'standings':
+      return <StandingsTablePro selectedDateId={dateId} />;
+    case 'history':
+      return <MatchHistory />;
+    default:
+      return <TournamentDateManager tournamentId={tournament.id} dates={tournament.dates || []} />;
+  }
+};
+
 const AppContent: React.FC = () => {
   const { tournament, loadTournamentHistory } = useTournament();
-  const [currentView, setCurrentView] = useState<ViewType>('tournaments');
+  const navigate = useNavigate();
+  const location = window.location;
+  
+  // Determinar la vista actual basada en la URL
+  const getCurrentView = (): ViewType => {
+    const path = location.pathname;
+    if (path.includes('/dates')) return 'dates';
+    if (path.includes('/standings')) return 'standings';  
+    if (path.includes('/history')) return 'history';
+    if (path.includes('/setup')) return 'basic-setup';
+    if (path.includes('/tournament/')) return 'dates';
+    return 'tournaments';
+  };
+  
+  const [currentView] = useState<ViewType>(getCurrentView());
 
   // Cargar historial de torneos al inicializar (solo una vez)
   useEffect(() => {
@@ -23,67 +71,35 @@ const AppContent: React.FC = () => {
   // Cambiar vista automáticamente cuando se crea un torneo
   useEffect(() => {
     if (tournament && (currentView === 'basic-setup' || currentView === 'setup')) {
-      // Si el torneo no tiene fechas, mostrar gestor de fechas
-      if (!tournament.dates || tournament.dates.length === 0) {
-        setCurrentView('dates');
-      } else {
-        // Si ya tiene fechas, mostrar partidos
-        setCurrentView('matches');
-      }
+      // Navegar a la página de fechas del torneo
+      navigate(`/tournament/${tournament.id}/dates`);
     }
-  }, [tournament, currentView]);
+  }, [tournament, currentView, navigate]);
 
-  const renderCurrentView = () => {
-    // Si no hay torneo activo, mostrar historial o setup
-    if (!tournament) {
-      switch (currentView) {
-        case 'setup':
-          return <TournamentSetup />; // Método legacy
-        case 'basic-setup':
-          return <BasicTournamentSetup />; // Nuevo método
-        case 'tournaments':
-          return <TournamentHistory />;
-        default:
-          return <TournamentHistory />;
-      }
-    }
-
-    // Si hay torneo activo, mostrar vistas del torneo
-    switch (currentView) {
-      case 'dates':
-        return <TournamentDateManager 
-          tournamentId={tournament.id} 
-          dates={tournament.dates || []} 
-        />;
-      case 'matches':
-        return <ManualMatchManagement />;
-      case 'standings':
-        return <StandingsTablePro />;
-      case 'history':
-        return <MatchHistory />;
-      case 'tournaments':
-        return <TournamentHistory />;
-      case 'setup':
-        return <TournamentSetup />; // Legacy
-      case 'basic-setup':
-        return <BasicTournamentSetup />;
-      default:
-        // Si el torneo no tiene fechas, mostrar gestor de fechas por defecto
-        if (!tournament.dates || tournament.dates.length === 0) {
-          return <TournamentDateManager 
-            tournamentId={tournament.id} 
-            dates={tournament.dates || []} 
-          />;
-        }
-        return <ManualMatchManagement />;
+  const handleViewChange = (view: ViewType) => {
+    if (tournament && (view === 'dates' || view === 'standings' || view === 'history')) {
+      navigate(`/tournament/${tournament.id}/${view}`);
+    } else if (view === 'tournaments') {
+      navigate('/');
+    } else {
+      navigate(`/${view}`);
     }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      <Header currentView={currentView} onViewChange={setCurrentView} />
+      <Header currentView={currentView} onViewChange={handleViewChange} />
       <main>
-        {renderCurrentView()}
+        <Routes>
+          <Route path="/" element={<TournamentHistory />} />
+          <Route path="/setup" element={<TournamentSetup />} />
+          <Route path="/basic-setup" element={<BasicTournamentSetup />} />
+          <Route path="/tournament/:tournamentId/dates" element={<TournamentRoute view="dates" />} />
+          <Route path="/tournament/:tournamentId/standings" element={<TournamentRoute view="standings" />} />
+          <Route path="/tournament/:tournamentId/standings/:dateId" element={<TournamentRoute view="standings" />} />
+          <Route path="/tournament/:tournamentId/history" element={<TournamentRoute view="history" />} />
+          <Route path="/tournament/:tournamentId" element={<TournamentRoute view="dates" />} />
+        </Routes>
       </main>
     </div>
   );
@@ -91,9 +107,11 @@ const AppContent: React.FC = () => {
 
 function App() {
   return (
-    <TournamentProvider>
-      <AppContent />
-    </TournamentProvider>
+    <Router>
+      <TournamentProvider>
+        <AppContent />
+      </TournamentProvider>
+    </Router>
   );
 }
 

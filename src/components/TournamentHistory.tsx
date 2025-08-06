@@ -1,9 +1,11 @@
 import React, { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTournament } from '../context/TournamentContext';
 import type { TournamentSummary } from '../types/tournament';
 
 export const TournamentHistory: React.FC = () => {
-  const { tournaments, loadTournament, deleteTournament, loadTournamentHistory, loading } = useTournament();
+  const { tournaments, deleteTournament, loadTournamentHistory, loading } = useTournament();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (tournaments.length === 0 && !loading) {
@@ -36,8 +38,8 @@ export const TournamentHistory: React.FC = () => {
     };
   };
 
-  const handleLoadTournament = async (tournamentId: string) => {
-    await loadTournament(tournamentId);
+  const handleLoadTournament = (tournamentId: string) => {
+    navigate(`/tournament/${tournamentId}/dates`);
   };
 
   const handleDeleteTournament = async (tournamentId: string, tournamentName: string) => {

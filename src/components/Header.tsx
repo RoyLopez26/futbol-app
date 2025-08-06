@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTournament } from '../context/TournamentContext';
 
 interface HeaderProps {
@@ -8,20 +9,21 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ currentView, onViewChange }) => {
   const { tournament, resetTournament } = useTournament();
+  const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleNewTournament = () => {
     if (tournament && window.confirm('¿Estás seguro de que quieres crear un nuevo torneo? Se perderá el progreso actual.')) {
       resetTournament();
-      onViewChange('basic-setup'); // Usar el nuevo método por defecto
+      navigate('/basic-setup');
     } else if (!tournament) {
-      onViewChange('basic-setup'); // Usar el nuevo método por defecto
+      navigate('/basic-setup');
     }
     setMobileMenuOpen(false);
   };
 
   const handleViewTournaments = () => {
-    onViewChange('tournaments');
+    navigate('/');
     setMobileMenuOpen(false);
   };
 
@@ -102,6 +104,44 @@ export const Header: React.FC<HeaderProps> = ({ currentView, onViewChange }) => 
                   <div className="absolute inset-0 bg-gradient-to-r from-emerald-400 to-teal-400 rounded-xl blur opacity-30 group-hover:opacity-50 transition-opacity"></div>
                 )}
               </button>
+            )}
+
+            {/* Navigation when tournament is active */}
+            {tournament && (
+              <>
+                <button
+                  onClick={() => handleViewChange('dates')}
+                  className={`group relative px-4 py-2 rounded-lg font-medium text-sm transition-all duration-300 ${
+                    currentView === 'dates'
+                      ? 'bg-white text-emerald-700 shadow-lg'
+                      : 'text-white hover:bg-white/20'
+                  }`}
+                >
+                  📅 Fechas
+                </button>
+                
+                <button
+                  onClick={() => handleViewChange('standings')}
+                  className={`group relative px-4 py-2 rounded-lg font-medium text-sm transition-all duration-300 ${
+                    currentView === 'standings'
+                      ? 'bg-white text-emerald-700 shadow-lg'
+                      : 'text-white hover:bg-white/20'
+                  }`}
+                >
+                  🏆 Tabla
+                </button>
+                
+                <button
+                  onClick={() => handleViewChange('history')}
+                  className={`group relative px-4 py-2 rounded-lg font-medium text-sm transition-all duration-300 ${
+                    currentView === 'history'
+                      ? 'bg-white text-emerald-700 shadow-lg'
+                      : 'text-white hover:bg-white/20'
+                  }`}
+                >
+                  📊 Historial
+                </button>
+              </>
             )}
 
             {/* Action Buttons */}

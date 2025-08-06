@@ -208,6 +208,7 @@ export class TournamentService {
       const matches: Match[] = matchPairings.map((pairing, index) => ({
         id: `match-${index + 1}`,
         tournamentId: '',
+        dateId: '',
         team1: pairing.team1,
         team2: pairing.team2,
         completed: false,
@@ -268,7 +269,8 @@ export class TournamentService {
         console.log('✅ Torneo encontrado:', data);
         return {
           ...data,
-          id: tournamentId
+          id: tournamentId,
+          dates: []
         };
       } else {
         console.log('❌ Torneo no encontrado');
@@ -298,6 +300,7 @@ export class TournamentService {
       if (matchIndex === -1) throw new Error('Match not found');
 
       const match = tournament.matches[matchIndex];
+      const wasAlreadyCompleted = match.completed || false;
       const updatedMatch = {
         ...match,
         result,
@@ -309,7 +312,7 @@ export class TournamentService {
 
       tournament.matches[matchIndex] = updatedMatch;
 
-      const updatedTeams = this.updateTeamStats(tournament.teams || [], updatedMatch, tournament.config);
+      const updatedTeams = this.updateTeamStats(tournament.teams || [], updatedMatch, tournament.config, wasAlreadyCompleted);
       
       const completedMatches = tournament.matches.filter(m => m.completed).length;
       const isComplete = completedMatches === tournament.totalRounds;
@@ -412,8 +415,79 @@ export class TournamentService {
     });
   }
 
-  // Actualizar estadísticas de equipos
-  private static updateTeamStats(teams: Team[], match: Match, config: TournamentConfig): Team[] {
+  // Recalcular todas las estadísticas de equipos desde cero basándose en todos los matches
+  private static recalculateTeamStats(teams: Team[], allMatches: Match[], config: TournamentConfig): Team[] {
+    const updatedTeams = teams.map(team => ({
+      ...team,
+      points: 0,
+      wins: 0,
+      draws: 0,
+      losses: 0,
+      matchesPlayed: 0,
+      goalsFor: 0,
+      goalsAgainst: 0,
+      goalDifference: 0
+    }));
+
+    // Procesar cada partido completado
+    for (const match of allMatches) {
+      if (!match.completed) continue;
+
+      const team1Index = updatedTeams.findIndex(t => t.name === match.team1);
+      const team2Index = updatedTeams.findIndex(t => t.name === match.team2);
+
+      if (team1Index === -1 || team2Index === -1) continue;
+
+      const team1 = updatedTeams[team1Index];
+      const team2 = updatedTeams[team2Index];
+
+      // Incrementar partidos jugados
+      team1.matchesPlayed++;
+      team2.matchesPlayed++;
+
+      // Actualizar goles
+      if (match.team1Score !== undefined && match.team2Score !== undefined) {
+        team1.goalsFor += match.team1Score;
+        team1.goalsAgainst += match.team2Score;
+        team2.goalsFor += match.team2Score;
+        team2.goalsAgainst += match.team1Score;
+
+        team1.goalDifference = team1.goalsFor - team1.goalsAgainst;
+        team2.goalDifference = team2.goalsFor - team2.goalsAgainst;
+      }
+
+      // Actualizar victorias, empates, derrotas y puntos
+      switch (match.result) {
+        case 'team1':
+          team1.wins++;
+          team2.losses++;
+          if (config.type === 'points') {
+            team1.points += 3;
+          }
+          break;
+        case 'team2':
+          team2.wins++;
+          team1.losses++;
+          if (config.type === 'points') {
+            team2.points += 3;
+          }
+          break;
+        case 'draw':
+          team1.draws++;
+          team2.draws++;
+          if (config.type === 'points') {
+            team1.points += 1;
+            team2.points += 1;
+          }
+          break;
+      }
+    }
+
+    return this.sortTeams(updatedTeams, config);
+  }
+
+  // Actualizar estadísticas de equipos (método legacy mantenido para compatibilidad)
+  private static updateTeamStats(teams: Team[], match: Match, config: TournamentConfig, wasAlreadyCompleted: boolean = false): Team[] {
     const updatedTeams = [...teams];
     
     const team1Index = updatedTeams.findIndex(t => t.name === match.team1);
@@ -424,8 +498,11 @@ export class TournamentService {
     const team1 = { ...updatedTeams[team1Index] };
     const team2 = { ...updatedTeams[team2Index] };
 
-    team1.matchesPlayed++;
-    team2.matchesPlayed++;
+    // Solo incrementar matchesPlayed si el partido no estaba previamente completado
+    if (!wasAlreadyCompleted) {
+      team1.matchesPlayed++;
+      team2.matchesPlayed++;
+    }
 
     if (match.team1Score !== undefined && match.team2Score !== undefined) {
       team1.goalsFor = (team1.goalsFor || 0) + match.team1Score;
@@ -575,6 +652,7 @@ export class TournamentService {
       const newMatch: Match = {
         id: `match-${Date.now()}`,
         tournamentId,
+        dateId: '',
         team1,
         team2,
         result,
@@ -592,7 +670,7 @@ export class TournamentService {
       tournament.currentMatch = tournament.matches.length;
 
       // Actualizar estadísticas de los equipos
-      const updatedTeams = this.updateTeamStats(tournament.teams || [], newMatch, tournament.config);
+      const updatedTeams = this.updateTeamStats(tournament.teams || [], newMatch, tournament.config, false);
       
       // Verificar si el torneo está completo (esto se puede personalizar según las reglas)
       const isComplete = false; // Por ahora dejamos que el usuario decida cuándo terminar
@@ -661,6 +739,7 @@ export class TournamentService {
       const tiebreakerMatch: Match = {
         id: `tiebreaker-${Date.now()}`,
         tournamentId,
+        dateId: '',
         team1: teams[0],
         team2: teams[1],
         completed: false,
@@ -876,6 +955,8 @@ export class TournamentService {
         team2,
         completed: false,
         round: currentMatches.length + 1,
+        block: 1, // Por defecto bloque 1
+        locked: false, // Por defecto no bloqueado
         team1Score: 0,
         team2Score: 0,
         isPlayoff: false
@@ -892,6 +973,102 @@ export class TournamentService {
       console.log('✅ Partido agregado a la fecha exitosamente');
     } catch (error) {
       console.error('❌ Error adding match to date:', error);
+      throw error;
+    }
+  }
+
+  // Agregar partido a una fecha con número de bloque específico
+  static async addMatchToDateWithBlock(
+    tournamentId: string, 
+    dateId: string, 
+    team1: string, 
+    team2: string,
+    block: number
+  ): Promise<void> {
+    try {
+      console.log('🔄 Agregando partido con bloque a fecha:', { tournamentId, dateId, team1, team2, block });
+      
+      // Obtener la fecha
+      const dateRef = ref(db, `tournament-dates/${tournamentId}/${dateId}`);
+      const dateSnapshot = await get(dateRef);
+      
+      if (!dateSnapshot.exists()) {
+        throw new Error('Tournament date not found');
+      }
+
+      const dateData = dateSnapshot.val() as TournamentDate;
+      
+      // Verificar que los equipos estén en la fecha
+      if (!dateData.teams.includes(team1) || !dateData.teams.includes(team2)) {
+        throw new Error('Teams must be part of this tournament date');
+      }
+
+      // Crear nuevo partido con bloque
+      const currentMatches = dateData.matches || [];
+      const newMatch: Match = {
+        id: `match-${Date.now()}`,
+        tournamentId,
+        dateId,
+        team1,
+        team2,
+        completed: false,
+        round: currentMatches.length + 1,
+        block,
+        locked: false,
+        team1Score: 0,
+        team2Score: 0,
+        isPlayoff: false
+      };
+
+      // Agregar partido a la fecha
+      const updatedMatches = [...currentMatches, newMatch];
+      
+      await update(dateRef, {
+        matches: updatedMatches,
+        totalMatches: updatedMatches.length
+      });
+
+      console.log('✅ Partido con bloque agregado a la fecha exitosamente');
+    } catch (error) {
+      console.error('❌ Error adding match with block to date:', error);
+      throw error;
+    }
+  }
+
+  // Bloquear partidos específicos en una fecha
+  static async lockMatchesInDate(
+    tournamentId: string,
+    dateId: string,
+    matchIds: string[]
+  ): Promise<void> {
+    try {
+      console.log('🔒 Bloqueando partidos en fecha:', { tournamentId, dateId, matchIds });
+      
+      // Obtener la fecha
+      const dateRef = ref(db, `tournament-dates/${tournamentId}/${dateId}`);
+      const dateSnapshot = await get(dateRef);
+      
+      if (!dateSnapshot.exists()) {
+        throw new Error('Tournament date not found');
+      }
+
+      const dateData = dateSnapshot.val() as TournamentDate;
+      const matches = dateData.matches || [];
+      
+      // Bloquear los partidos especificados
+      const updatedMatches = matches.map(match => 
+        matchIds.includes(match.id) 
+          ? { ...match, locked: true }
+          : match
+      );
+      
+      await update(dateRef, {
+        matches: updatedMatches
+      });
+
+      console.log('✅ Partidos bloqueados exitosamente');
+    } catch (error) {
+      console.error('❌ Error locking matches in date:', error);
       throw error;
     }
   }
@@ -986,12 +1163,21 @@ export class TournamentService {
         completedMatches
       });
 
-      // Obtener el torneo y actualizar estadísticas globales
-      const tournament = await this.getTournament(tournamentId);
-      if (!tournament) throw new Error('Tournament not found');
+      // Obtener el torneo completo con todas las fechas para recalcular estadísticas
+      const tournamentWithDates = await this.getTournamentWithDates(tournamentId);
+      if (!tournamentWithDates) throw new Error('Tournament not found');
 
-      // Actualizar estadísticas de equipos usando la configuración de la fecha
-      const updatedTeams = this.updateTeamStats(tournament.teams || [], updatedMatch, dateData.config);
+      // Recalcular todas las estadísticas desde cero usando todos los matches de todas las fechas
+      const allMatches: Match[] = [];
+      if (tournamentWithDates.dates) {
+        tournamentWithDates.dates.forEach(date => {
+          if (date.matches && Array.isArray(date.matches)) {
+            allMatches.push(...date.matches);
+          }
+        });
+      }
+
+      const updatedTeams = this.recalculateTeamStats(tournamentWithDates.teams || [], allMatches, dateData.config);
       
       // Actualizar el torneo con las nuevas estadísticas
       const tournamentRef = ref(db, `tournaments/${tournamentId}`);

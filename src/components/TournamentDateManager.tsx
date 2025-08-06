@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTournament } from '../context/TournamentContext';
 import type { TournamentConfig, TournamentDate, Match } from '../types/tournament';
 
@@ -11,7 +12,18 @@ export const TournamentDateManager: React.FC<TournamentDateManagerProps> = ({
   tournamentId, 
   dates 
 }) => {
-  const { addTournamentDate, closeTournamentDate, addMatchToDate, loading } = useTournament();
+  const { addTournamentDate, closeTournamentDate, addMatchToDateWithBlock, lockMatchesInDate, updateMatchResult, loading } = useTournament();
+  
+  // Ordenar fechas para mostrar la más reciente primero
+  const sortedDates = [...dates].sort((a, b) => {
+    // Primero ordenar por fecha de creación (más reciente primero)
+    if (a.createdAt && b.createdAt) {
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    }
+    // Si no hay fecha de creación, usar el ID como fallback (mayor ID = más reciente)
+    return b.id.localeCompare(a.id);
+  });
+  const navigate = useNavigate();
   const [showAddForm, setShowAddForm] = useState(false);
   const [newDateName, setNewDateName] = useState('');
   const [newDateTeams, setNewDateTeams] = useState<string[]>(['', '']);
@@ -20,6 +32,7 @@ export const TournamentDateManager: React.FC<TournamentDateManagerProps> = ({
   const [editingMatch, setEditingMatch] = useState<string | null>(null);
   const [team1Score, setTeam1Score] = useState<number>(0);
   const [team2Score, setTeam2Score] = useState<number>(0);
+  const [savingScore, setSavingScore] = useState<boolean>(false);
 
   const addTeam = () => {
     if (newDateTeams.length < 16) {
@@ -80,37 +93,219 @@ export const TournamentDateManager: React.FC<TournamentDateManagerProps> = ({
     }
   };
 
-  // Genera fixture round-robin (todos contra todos)
+  const handleViewDateStandings = (dateId: string) => {
+    navigate(`/tournament/${tournamentId}/standings/${dateId}`);
+  };
+
+  // Genera fixture round-robin balanceado evitando partidos consecutivos
   const generateRoundRobinMatches = (teams: string[], blockNumber: number = 1) => {
-    const matches: { team1: string; team2: string; block: number }[] = [];
+    const matches: { team1: string; team2: string; block: number; round: number }[] = [];
+    const numTeams = teams.length;
     
-    for (let i = 0; i < teams.length; i++) {
-      for (let j = i + 1; j < teams.length; j++) {
+    if (numTeams < 2) return matches;
+    
+    // Caso especial para 5 equipos con orden específico
+    if (numTeams === 5) {
+      const [A, B, C, D, E] = teams;
+      const predefinedMatches = [
+        { team1: A, team2: B, round: 1 },
+        { team1: C, team2: D, round: 1 },
+        { team1: E, team2: A, round: 2 },
+        { team1: B, team2: C, round: 2 },
+        { team1: D, team2: E, round: 3 },
+        { team1: A, team2: C, round: 3 },
+        { team1: B, team2: D, round: 4 },
+        { team1: C, team2: E, round: 4 },
+        { team1: A, team2: D, round: 5 },
+        { team1: B, team2: E, round: 5 }
+      ];
+      
+      predefinedMatches.forEach(match => {
         matches.push({
-          team1: teams[i],
-          team2: teams[j],
-          block: blockNumber
+          team1: match.team1,
+          team2: match.team2,
+          block: blockNumber,
+          round: match.round
         });
+      });
+      
+      return matches;
+    }
+    
+    // Generar todas las combinaciones únicas posibles
+    const allPairs: {team1: string, team2: string}[] = [];
+    for (let i = 0; i < numTeams; i++) {
+      for (let j = i + 1; j < numTeams; j++) {
+        allPairs.push({ team1: teams[i], team2: teams[j] });
       }
     }
+    
+    // Comenzar con A vs B, C vs D si hay al menos 4 equipos
+    const priorityPairs: {team1: string, team2: string}[] = [];
+    if (numTeams >= 4) {
+      priorityPairs.push({ team1: teams[0], team2: teams[1] }); // A vs B
+      priorityPairs.push({ team1: teams[2], team2: teams[3] }); // C vs D
+    } else if (numTeams >= 2) {
+      priorityPairs.push({ team1: teams[0], team2: teams[1] }); // A vs B
+    }
+    
+    // Reorganizar: poner las parejas prioritarias primero
+    const remainingPairs = allPairs.filter(pair => 
+      !priorityPairs.some(pp => 
+        (pp.team1 === pair.team1 && pp.team2 === pair.team2) ||
+        (pp.team1 === pair.team2 && pp.team2 === pair.team1)
+      )
+    );
+    
+    const orderedPairs = [...priorityPairs, ...remainingPairs];
+    
+    // Distribuir en rondas evitando que un equipo juegue más de 1 vez por ronda
+    const rounds: {team1: string, team2: string}[][] = [];
+    const usedPairs = new Set<string>();
+    
+    let currentRound = 0;
+    while (orderedPairs.some(pair => !usedPairs.has(`${pair.team1}-${pair.team2}`))) {
+      if (!rounds[currentRound]) rounds[currentRound] = [];
+      const usedTeamsInRound = new Set<string>();
+      
+      // Intentar agregar parejas en orden, evitando que un equipo juegue más de una vez por ronda
+      for (const pair of orderedPairs) {
+        const pairKey = `${pair.team1}-${pair.team2}`;
+        if (!usedPairs.has(pairKey) && 
+            !usedTeamsInRound.has(pair.team1) && 
+            !usedTeamsInRound.has(pair.team2)) {
+          rounds[currentRound].push(pair);
+          usedPairs.add(pairKey);
+          usedTeamsInRound.add(pair.team1);
+          usedTeamsInRound.add(pair.team2);
+        }
+      }
+      currentRound++;
+      
+      // Prevenir bucles infinitos
+      if (currentRound > numTeams * 2) break;
+    }
+    
+    // Convertir a formato de matches
+    rounds.forEach((roundPairs, roundIndex) => {
+      roundPairs.forEach(pair => {
+        matches.push({
+          team1: pair.team1,
+          team2: pair.team2,
+          block: blockNumber,
+          round: roundIndex + 1
+        });
+      });
+    });
     
     return matches;
   };
 
   const handleGenerateMatches = async (date: TournamentDate) => {
     const teams = date.teams;
+    const existingMatches = date.matches || [];
+    const isVolverAJugar = existingMatches.length > 0 && existingMatches.every(m => m.completed);
+    
+    if (isVolverAJugar) {
+      // Si es "Volver a jugar", bloquear todos los partidos existentes
+      await lockExistingMatches(date.id, existingMatches);
+    }
+    
+    // Determinar el próximo número de bloque
+    const maxBlock = existingMatches.length > 0 
+      ? Math.max(...existingMatches.map(m => m.block || 1))
+      : 0;
+    const nextBlock = maxBlock + 1;
+    
     const allMatches = [];
     
-    // Generar partidos para cada bloque
-    for (let block = 1; block <= numBlocks; block++) {
-      const blockMatches = generateRoundRobinMatches(teams, block);
+    if (isVolverAJugar) {
+      // Replicar exactamente los mismos enfrentamientos del bloque anterior
+      const previousBlockMatches = existingMatches.filter(m => (m.block || 1) === maxBlock);
+      
+      // Calcular la última ronda utilizada en todos los bloques
+      const maxRound = existingMatches.length > 0 
+        ? Math.max(...existingMatches.map(m => m.round))
+        : 0;
+      
+      // Ordenar los partidos del bloque anterior por ronda para mantener el orden
+      const sortedPreviousMatches = previousBlockMatches.sort((a, b) => a.round - b.round);
+      
+      // Crear un mapeo de las rondas originales del bloque anterior
+      const uniqueRounds = [...new Set(sortedPreviousMatches.map(m => m.round))].sort((a, b) => a - b);
+      const roundMapping: Record<number, number> = {};
+      
+      // Mapear cada ronda original a una nueva ronda consecutiva
+      uniqueRounds.forEach((originalRound, index) => {
+        roundMapping[originalRound] = maxRound + 1 + index;
+      });
+      
+      // Asignar las nuevas rondas basadas en el mapeo
+      sortedPreviousMatches.forEach((previousMatch) => {
+        allMatches.push({
+          team1: previousMatch.team1,
+          team2: previousMatch.team2,
+          block: nextBlock,
+          round: roundMapping[previousMatch.round]
+        });
+      });
+      
+      console.log(`🔄 Replicando ${allMatches.length} partidos del Bloque ${maxBlock} en Bloque ${nextBlock}`);
+      console.log(`🔒 Se bloquearon ${existingMatches.length} partidos anteriores`);
+      console.log(`📋 Enfrentamientos mantenidos: ${allMatches.map(m => `${m.team1} vs ${m.team2}`).join(', ')}`);
+    } else {
+      // Primera vez: generar fixture nuevo
+      const blockMatches = generateRoundRobinMatches(teams, nextBlock);
       allMatches.push(...blockMatches);
+      
+      console.log(`🎯 Fixture generado para ${teams.length} equipos:`, teams);
+      console.log(`📅 Bloque: ${nextBlock}`);
+      console.log(`⚽ Total de partidos nuevos: ${allMatches.length}`);
     }
     
-    // Crear todos los partidos
-    for (const match of allMatches) {
-      await addMatchToDate(tournamentId, date.id, match.team1, match.team2);
+    // Verificar que no haya duplicados en el nuevo bloque
+    const pairSet = new Set<string>();
+    const duplicates: string[] = [];
+    
+    allMatches.forEach(match => {
+      const pairKey1 = `${match.team1}-${match.team2}`;
+      const pairKey2 = `${match.team2}-${match.team1}`;
+      
+      if (pairSet.has(pairKey1) || pairSet.has(pairKey2)) {
+        duplicates.push(`${match.team1} vs ${match.team2}`);
+      } else {
+        pairSet.add(pairKey1);
+      }
+    });
+    
+    if (duplicates.length > 0) {
+      console.error('🚫 DUPLICADOS ENCONTRADOS:', duplicates);
+    } else {
+      console.log('✅ Sin duplicados - Fixture correcto');
     }
+    
+    // Mostrar fixture detallado por rondas
+    const roundGroups = allMatches.reduce((acc, match) => {
+      if (!acc[match.round]) acc[match.round] = [];
+      acc[match.round].push(`${match.team1} vs ${match.team2}`);
+      return acc;
+    }, {} as Record<number, string[]>);
+    
+    Object.keys(roundGroups).sort().forEach(round => {
+      console.log(`📅 Ronda ${round}:`, roundGroups[Number(round)].join(', '));
+    });
+    
+    // Crear todos los partidos nuevos en el orden balanceado
+    for (const match of allMatches) {
+      await addMatchToDateWithBlock(tournamentId, date.id, match.team1, match.team2, match.block || nextBlock);
+    }
+  };
+
+  // Nueva función para bloquear partidos existentes
+  const lockExistingMatches = async (dateId: string, existingMatches: Match[]) => {
+    const matchIds = existingMatches.map(match => match.id);
+    await lockMatchesInDate(tournamentId, dateId, matchIds);
+    console.log(`🔒 ${existingMatches.length} partidos bloqueados exitosamente`);
   };
 
   const handleScoreSubmit = async (match: Match) => {
@@ -119,20 +314,29 @@ export const TournamentDateManager: React.FC<TournamentDateManagerProps> = ({
       return;
     }
 
-    let result: 'team1' | 'team2' | 'draw';
+    setSavingScore(true);
     
-    if (team1Score > team2Score) {
-      result = 'team1';
-    } else if (team2Score > team1Score) {
-      result = 'team2';
-    } else {
-      result = 'draw';
-    }
+    try {
+      let result: 'team1' | 'team2' | 'draw';
+      
+      if (team1Score > team2Score) {
+        result = 'team1';
+      } else if (team2Score > team1Score) {
+        result = 'team2';
+      } else {
+        result = 'draw';
+      }
 
-    await updateMatchResult(match.id, result, team1Score, team2Score);
-    setEditingMatch(null);
-    setTeam1Score(0);
-    setTeam2Score(0);
+      await updateMatchResult(match.id, result, team1Score, team2Score);
+      setEditingMatch(null);
+      setTeam1Score(0);
+      setTeam2Score(0);
+    } catch (error) {
+      console.error('Error guardando resultado:', error);
+      alert('Error al guardar el resultado. Inténtalo de nuevo.');
+    } finally {
+      setSavingScore(false);
+    }
   };
 
   const startEditingMatch = (match: Match) => {
@@ -349,7 +553,7 @@ export const TournamentDateManager: React.FC<TournamentDateManagerProps> = ({
               </p>
             </div>
           ) : (
-            dates.map((date) => (
+            sortedDates.map((date) => (
               <div
                 key={date.id}
                 className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden"
@@ -413,38 +617,72 @@ export const TournamentDateManager: React.FC<TournamentDateManagerProps> = ({
                       <h4 className="font-semibold text-gray-700 mb-3 flex items-center">
                         ⚽ Partidos ({date.completedMatches}/{date.totalMatches} completados)
                       </h4>
-                      <div className="space-y-3 max-h-80 overflow-y-auto bg-gray-50 p-4 rounded-lg">
-                        {date.matches.map((match) => (
-                          <div
-                            key={match.id}
-                            className={`flex items-center justify-between p-3 rounded-lg border ${
-                              match.completed 
-                                ? 'bg-green-50 border-green-200' 
-                                : 'bg-gray-50 border-gray-200'
-                            }`}
-                          >
-                            <div className="flex-1">
-                              <div className="flex items-center justify-between">
-                                <div className="text-sm font-bold text-gray-800">
-                                  {match.team1} 🆚 {match.team2}
-                                </div>
-                                {match.completed && (
-                                  <div className="text-lg font-bold text-green-600 bg-green-100 px-3 py-1 rounded-full">
-                                    {match.team1Score} - {match.team2Score}
-                                  </div>
-                                )}
+                      <div className="space-y-6 max-h-80 overflow-y-auto bg-gray-50 p-4 rounded-lg">
+                        {/* Agrupar partidos por bloque */}
+                        {Array.from(new Set(date.matches.map(m => m.block || 1))).sort((a, b) => a - b).map(block => {
+                          const blockMatches = date.matches.filter(m => (m.block || 1) === block);
+                          const isBlockLocked = blockMatches.some(m => m.locked);
+                          return (
+                            <div key={block} className="space-y-3">
+                              <div className={`text-sm font-bold px-4 py-2 rounded-full inline-flex items-center space-x-2 ${
+                                isBlockLocked 
+                                  ? 'text-red-700 bg-red-100 border border-red-200' 
+                                  : 'text-blue-600 bg-blue-100'
+                              }`}>
+                                <span>{isBlockLocked ? '🔒' : '🎮'}</span>
+                                <span>Bloque {block} {isBlockLocked ? '(Bloqueado)' : '(Activo)'}</span>
                               </div>
-                              {match.completed && (
-                                <div className="text-xs text-gray-500 mt-1">
-                                  Ganador: {
-                                    match.result === 'team1' ? match.team1 : 
-                                    match.result === 'team2' ? match.team2 : 'Empate'
-                                  }
-                                </div>
-                              )}
-                            </div>
+                              
+                              {/* Agrupar por ronda dentro del bloque */}
+                              <div className="space-y-2 pl-4">
+                                {Array.from(new Set(blockMatches.map(m => m.round))).sort((a, b) => a - b).map(round => (
+                                  <div key={`${block}-${round}`} className="space-y-2">
+                                    <div className="text-xs font-medium text-gray-500 px-2">
+                                      Ronda {round}
+                                    </div>
+                                    <div className="space-y-2 pl-2">
+                                      {blockMatches.filter(m => m.round === round).map((match) => (
+                                        <div
+                                          key={match.id}
+                                          className={`flex items-center justify-between p-3 rounded-lg border transition-all duration-200 ${
+                                            match.locked 
+                                              ? 'bg-red-50 border-red-200 opacity-75'
+                                              : match.completed 
+                                                ? 'bg-green-50 border-green-200' 
+                                                : 'bg-white border-gray-200 hover:border-gray-300'
+                                          }`}
+                                        >
+                                          <div className="flex-1">
+                                            <div className="flex items-center justify-between">
+                                              <div className={`text-sm font-bold flex items-center space-x-2 ${
+                                                match.locked ? 'text-red-700' : 'text-gray-800'
+                                              }`}>
+                                                {match.locked && <span className="text-xs">🔒</span>}
+                                                <span>{match.team1} 🆚 {match.team2}</span>
+                                              </div>
+                                              {match.completed && (
+                                                <div className={`text-lg font-bold px-3 py-1 rounded-full ${
+                                                  match.locked 
+                                                    ? 'text-red-600 bg-red-100' 
+                                                    : 'text-green-600 bg-green-100'
+                                                }`}>
+                                                  {match.team1Score} - {match.team2Score}
+                                                </div>
+                                              )}
+                                            </div>
+                                            {match.completed && (
+                                              <div className={`text-xs mt-1 ${
+                                                match.locked ? 'text-red-500' : 'text-gray-500'
+                                              }`}>
+                                                Ganador: {
+                                                  match.result === 'team1' ? match.team1 : 
+                                                  match.result === 'team2' ? match.team2 : 'Empate'
+                                                }
+                                              </div>
+                                            )}
+                                          </div>
                             
-                            {!date.closed && (
+                            {!date.closed && !match.locked && (
                               <div className="flex items-center space-x-2">
                                 {editingMatch === match.id ? (
                                   <div className="flex flex-col space-y-2 bg-blue-50 p-3 rounded-lg border-2 border-blue-200">
@@ -481,13 +719,26 @@ export const TournamentDateManager: React.FC<TournamentDateManagerProps> = ({
                                     <div className="flex space-x-2">
                                       <button
                                         onClick={() => handleScoreSubmit(match)}
-                                        className="flex-1 px-4 py-2 bg-green-500 text-white font-medium rounded-lg hover:bg-green-600 transition-colors"
+                                        disabled={savingScore}
+                                        className="flex-1 px-4 py-2 bg-green-500 text-white font-medium rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                       >
-                                        ✅ Guardar
+                                        {savingScore ? (
+                                          <div className="flex items-center justify-center space-x-1">
+                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                            <span>Guardando...</span>
+                                          </div>
+                                        ) : (
+                                          '✅ Guardar'
+                                        )}
                                       </button>
                                       <button
-                                        onClick={() => setEditingMatch(null)}
-                                        className="px-4 py-2 bg-gray-500 text-white font-medium rounded-lg hover:bg-gray-600 transition-colors"
+                                        onClick={() => {
+                                          setEditingMatch(null);
+                                          setTeam1Score(0);
+                                          setTeam2Score(0);
+                                        }}
+                                        disabled={savingScore}
+                                        className="px-4 py-2 bg-gray-500 text-white font-medium rounded-lg hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                       >
                                         ❌ Cancelar
                                       </button>
@@ -507,39 +758,88 @@ export const TournamentDateManager: React.FC<TournamentDateManagerProps> = ({
                                 )}
                               </div>
                             )}
-                          </div>
-                        ))}
+                            
+                            {/* Mensaje para partidos bloqueados */}
+                            {match.locked && (
+                              <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded border border-red-200">
+                                🔒 Partido bloqueado - No editable
+                              </div>
+                            )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
 
                   {/* Actions */}
                   {!date.closed && (
-                    <div className="flex space-x-3">
-                      {(!date.matches || date.matches.length === 0) ? (
+                    <div className="flex flex-col space-y-3">
+                      <div className="flex space-x-3">
+                        {(!date.matches || date.matches.length === 0) ? (
+                          <button
+                            onClick={() => handleGenerateMatches(date)}
+                            className="flex-1 bg-blue-500 text-white font-medium py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors"
+                          >
+                            🎯 Generar Partidos
+                          </button>
+                        ) : (
+                          <div className="flex-1 text-center py-2 px-4 bg-green-100 text-green-800 rounded-lg font-medium">
+                            ✅ {date.totalMatches} Partidos Listos
+                          </div>
+                        )}
+                        
+                        {/* Botón Ver Tabla - solo si hay partidos */}
+                        {date.matches && date.matches.length > 0 && (
+                          <button
+                            onClick={() => handleViewDateStandings(date.id)}
+                            className="bg-green-500 text-white font-medium py-2 px-4 rounded-lg hover:bg-green-600 transition-colors"
+                          >
+                            📊 Ver Tabla
+                          </button>
+                        )}
+                        
+                        <button
+                          onClick={() => handleCloseDate(date.id, date.name)}
+                          className="bg-orange-500 text-white font-medium py-2 px-4 rounded-lg hover:bg-orange-600 transition-colors"
+                        >
+                          🔒 Cerrar Fecha
+                        </button>
+                      </div>
+                      
+                      {/* Botón Volver a Jugar cuando todos los partidos estén completados */}
+                      {date.matches && date.matches.length > 0 && date.completedMatches === date.totalMatches && (
                         <button
                           onClick={() => handleGenerateMatches(date)}
-                          className="flex-1 bg-blue-500 text-white font-medium py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors"
+                          className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold py-3 px-6 rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all duration-200 shadow-lg"
                         >
-                          🎯 Generar Partidos
+                          🔄 Volver a Jugar (Mismo Fixture)
                         </button>
-                      ) : (
-                        <div className="flex-1 text-center py-2 px-4 bg-green-100 text-green-800 rounded-lg font-medium">
-                          ✅ {date.totalMatches} Partidos Listos
-                        </div>
                       )}
-                      <button
-                        onClick={() => handleCloseDate(date.id, date.name)}
-                        className="bg-orange-500 text-white font-medium py-2 px-4 rounded-lg hover:bg-orange-600 transition-colors"
-                      >
-                        🔒 Cerrar Fecha
-                      </button>
                     </div>
                   )}
                   
                   {date.closed && (
-                    <div className="text-center py-2 px-4 bg-gray-100 text-gray-600 rounded-lg font-medium">
-                      🔒 Fecha Cerrada - No se pueden hacer cambios
+                    <div className="flex flex-col space-y-3">
+                      <div className="text-center py-2 px-4 bg-gray-100 text-gray-600 rounded-lg font-medium">
+                        🔒 Fecha Cerrada - No se pueden hacer cambios
+                      </div>
+                      
+                      {/* Botón Ver Tabla para fechas cerradas */}
+                      {date.matches && date.matches.length > 0 && (
+                        <button
+                          onClick={() => handleViewDateStandings(date.id)}
+                          className="bg-green-500 text-white font-medium py-2 px-4 rounded-lg hover:bg-green-600 transition-colors"
+                        >
+                          📊 Ver Tabla de esta Fecha
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
