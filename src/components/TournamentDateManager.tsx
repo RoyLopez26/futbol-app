@@ -651,50 +651,46 @@ export const TournamentDateManager: React.FC<TournamentDateManagerProps> = ({
                             {!date.closed && !match.locked && (
                               <div className="flex items-center space-x-2">
                                 {editingMatch === match.id ? (
-                                  <div className="flex flex-col space-y-2 bg-blue-50 p-3 rounded-lg border-2 border-blue-200">
-                                    <div className="text-xs font-medium text-blue-800 text-center mb-1">
-                                      Anotar Goles
-                                    </div>
-                                    <div className="flex items-center space-x-3">
-                                      <div className="text-center">
-                                        <div className="text-xs text-gray-600 mb-1">{match.team1}</div>
+                                  <div className="w-full bg-gradient-to-r from-blue-50 to-green-50 p-2 rounded-lg border border-blue-200 shadow-sm">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <div className="flex items-center space-x-2">
+                                        <span className="text-xs font-medium text-blue-700 truncate">{match.team1}</span>
                                         <input
                                           type="number"
                                           min="0"
                                           max="20"
                                           value={team1Score}
                                           onChange={(e) => setTeam1Score(parseInt(e.target.value) || 0)}
-                                          className="w-16 px-2 py-2 text-center text-lg font-bold rounded-lg border-2 border-gray-300 focus:border-blue-500 focus:outline-none"
+                                          className="w-10 h-8 px-1 text-center text-sm font-bold rounded border border-gray-300 focus:border-blue-500 focus:outline-none"
                                           placeholder="0"
                                         />
                                       </div>
-                                      <div className="text-2xl font-bold text-gray-400">-</div>
-                                      <div className="text-center">
-                                        <div className="text-xs text-gray-600 mb-1">{match.team2}</div>
+                                      <span className="text-xs font-bold text-gray-500 px-1">VS</span>
+                                      <div className="flex items-center space-x-2">
                                         <input
                                           type="number"
                                           min="0"
                                           max="20"
                                           value={team2Score}
                                           onChange={(e) => setTeam2Score(parseInt(e.target.value) || 0)}
-                                          className="w-16 px-2 py-2 text-center text-lg font-bold rounded-lg border-2 border-gray-300 focus:border-blue-500 focus:outline-none"
+                                          className="w-10 h-8 px-1 text-center text-sm font-bold rounded border border-gray-300 focus:border-blue-500 focus:outline-none"
                                           placeholder="0"
                                         />
+                                        <span className="text-xs font-medium text-blue-700 truncate">{match.team2}</span>
                                       </div>
                                     </div>
                                     <div className="flex space-x-2">
                                       <button
                                         onClick={() => handleScoreSubmit(match)}
                                         disabled={savingScore}
-                                        className="flex-1 px-4 py-2 bg-green-500 text-white font-medium rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="flex-1 h-8 bg-green-500 text-white text-xs font-medium rounded hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                                       >
                                         {savingScore ? (
-                                          <div className="flex items-center justify-center space-x-1">
-                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                                            <span>Guardando...</span>
+                                          <div className="flex items-center space-x-1">
+                                            <div className="animate-spin rounded-full h-3 w-3 border border-white border-t-transparent"></div>
                                           </div>
                                         ) : (
-                                          '✅ Guardar'
+                                          <span>Guardar</span>
                                         )}
                                       </button>
                                       <button
@@ -704,9 +700,9 @@ export const TournamentDateManager: React.FC<TournamentDateManagerProps> = ({
                                           setTeam2Score(0);
                                         }}
                                         disabled={savingScore}
-                                        className="px-4 py-2 bg-gray-500 text-white font-medium rounded-lg hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="flex-1 h-8 bg-gray-500 text-white text-xs font-medium rounded hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                                       >
-                                        ❌ Cancelar
+                                        <span>Cancelar</span>
                                       </button>
                                     </div>
                                   </div>
