@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTournament } from '../context/TournamentContext';
 
 export const BasicTournamentSetup: React.FC = () => {
   const { createBasicTournament, loading } = useTournament();
+  const navigate = useNavigate();
   const [tournamentName, setTournamentName] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -13,7 +15,14 @@ export const BasicTournamentSetup: React.FC = () => {
       return;
     }
 
-    await createBasicTournament(tournamentName.trim());
+    try {
+      const tournamentId = await createBasicTournament(tournamentName.trim());
+      
+      // Redirigir a fechas después de crear el torneo
+      navigate(`/tournament/${tournamentId}/dates`);
+    } catch (error) {
+      console.error('Error creating basic tournament:', error);
+    }
   };
 
   return (

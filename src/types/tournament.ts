@@ -165,7 +165,7 @@ export interface TournamentContextType {
   error: string | null;
   
   // Tournament management
-  createBasicTournament: (name: string) => Promise<void>; // Solo crear con nombre
+  createBasicTournament: (name: string) => Promise<string>; // Solo crear con nombre
   loadTournament: (tournamentId: string) => Promise<void>;
   loadTournamentHistory: () => Promise<void>;
   deleteTournament: (tournamentId: string) => Promise<void>;
@@ -183,9 +183,9 @@ export interface TournamentContextType {
   updateMatchResult: (matchId: string, result: MatchResult, team1Score?: number, team2Score?: number) => Promise<void>;
   
   // Legacy methods for compatibility
-  createTournament: (name: string, teamNames: string[], config: TournamentConfig) => Promise<void>;
+  createTournament: (name: string, teamNames: string[], config: TournamentConfig) => Promise<string>;
   createManualTournament: (name: string, teamNames: string[], config: TournamentConfig) => Promise<void>;
-  createCustomTournament: (name: string, teamNames: string[], matches: MatchPairing[], config: TournamentConfig) => Promise<void>;
+  createCustomTournament: (name: string, teamNames: string[], matches: MatchPairing[], config: TournamentConfig) => Promise<string>;
   addMatchResult: (team1: string, team2: string, result: MatchResult, team1Score?: number, team2Score?: number) => Promise<void>;
   validateTournament: (teamNames: string[], matches: MatchPairing[]) => TournamentValidation;
   generateAllMatches: (teamNames: string[]) => MatchPairing[];

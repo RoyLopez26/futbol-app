@@ -120,11 +120,7 @@ export class TournamentService {
     config: TournamentConfig
   ): Promise<string> {
     try {
-      console.log('🔄 Realtime DB: Creando torneo manual...');
-      console.log('📋 Datos del torneo:', { name, teamNames, config });
       
-      console.log('🔥 Verificando conexión a Firebase Realtime Database...');
-      console.log('Database:', db);
       
       const teams: Team[] = teamNames.map((teamName, index) => ({
         id: `team-${index + 1}`,
@@ -142,8 +138,6 @@ export class TournamentService {
       // Crear torneo sin partidos predefinidos
       const matches: Match[] = [];
 
-      console.log('📊 Datos preparados para Realtime Database');
-      console.log('💾 Intentando guardar en Firebase...');
 
       // Crear referencia para un nuevo torneo
       const tournamentsRef = ref(db, 'tournaments');
@@ -164,12 +158,10 @@ export class TournamentService {
         customMatchOrder: true
       };
 
-      console.log('🚀 Guardando torneo manual en Realtime Database con ID:', tournamentId);
       
       // Guardar el torneo
       await set(newTournamentRef, tournamentData);
 
-      console.log('✅ Torneo manual creado exitosamente en Realtime Database!');
       return tournamentId;
     } catch (error) {
       console.error('❌ Error creating manual tournament:', error);
@@ -186,11 +178,7 @@ export class TournamentService {
     config: TournamentConfig
   ): Promise<string> {
     try {
-      console.log('🔄 Realtime DB: Iniciando creación de torneo...');
-      console.log('📋 Datos del torneo:', { name, teamNames, matchPairings, config });
       
-      console.log('🔥 Verificando conexión a Firebase Realtime Database...');
-      console.log('Database:', db);
       
       const teams: Team[] = teamNames.map((teamName, index) => ({
         id: `team-${index + 1}`,
@@ -218,8 +206,6 @@ export class TournamentService {
         isPlayoff: false
       }));
 
-      console.log('📊 Datos preparados para Realtime Database');
-      console.log('💾 Intentando guardar en Firebase...');
 
       // Crear referencia para un nuevo torneo
       const tournamentsRef = ref(db, 'tournaments');
@@ -243,12 +229,10 @@ export class TournamentService {
         customMatchOrder: true
       };
 
-      console.log('🚀 Guardando en Realtime Database con ID:', tournamentId);
       
       // Guardar el torneo
       await set(newTournamentRef, tournamentData);
 
-      console.log('✅ Torneo creado exitosamente en Realtime Database!');
       return tournamentId;
     } catch (error) {
       console.error('❌ Error creating tournament:', error);
@@ -260,20 +244,17 @@ export class TournamentService {
   // Obtener torneo por ID
   static async getTournament(tournamentId: string): Promise<Tournament | null> {
     try {
-      console.log('🔍 Buscando torneo con ID:', tournamentId);
       const tournamentRef = ref(db, `tournaments/${tournamentId}`);
       const snapshot = await get(tournamentRef);
 
       if (snapshot.exists()) {
         const data = snapshot.val() as TournamentDoc;
-        console.log('✅ Torneo encontrado:', data);
         return {
           ...data,
           id: tournamentId,
           dates: []
         };
       } else {
-        console.log('❌ Torneo no encontrado');
         return null;
       }
     } catch (error) {
@@ -291,7 +272,6 @@ export class TournamentService {
     team2Score: number = 0
   ): Promise<void> {
     try {
-      console.log('🔄 Actualizando resultado del partido:', { tournamentId, matchId, result, team1Score, team2Score });
       
       const tournament = await this.getTournament(tournamentId);
       if (!tournament) throw new Error('Tournament not found');
@@ -360,7 +340,6 @@ export class TournamentService {
 
       await update(tournamentRef, updateData);
 
-      console.log('✅ Resultado del partido actualizado');
     } catch (error) {
       console.error('❌ Error updating match result:', error);
       throw error;
@@ -552,34 +531,25 @@ export class TournamentService {
   // Obtener historial de torneos
   static async getAllTournaments(): Promise<TournamentSummary[]> {
     try {
-      console.log('🔍 Realtime DB: Iniciando búsqueda de torneos...');
-      console.log('🔥 Verificando conexión a Firebase Realtime Database...');
-      console.log('Database:', db);
       
       const tournamentsRef = ref(db, 'tournaments');
       // Simplificamos la consulta - sin orderBy para evitar problemas de indexación
       
-      console.log('📋 Query preparada para Realtime Database');
-      console.log('⏳ Ejecutando consulta...');
       
       const snapshot = await get(tournamentsRef);
       
-      console.log('📊 Snapshot obtenido, existe:', snapshot.exists());
       
       if (!snapshot.exists()) {
-        console.log('📋 No hay torneos en la base de datos');
         return [];
       }
 
       const data = snapshot.val();
-      console.log('📊 Datos obtenidos:', data);
       
       const tournaments: TournamentSummary[] = [];
       
       // Convertir objeto a array y ordenar por fecha de creación (más reciente primero)
       Object.keys(data).forEach(key => {
         const tournament = data[key] as TournamentDoc;
-        console.log('📝 Procesando torneo:', key, tournament);
         
         tournaments.push({
           id: key,
@@ -606,7 +576,6 @@ export class TournamentService {
         return bTime - aTime;
       });
       
-      console.log('✅ Torneos procesados:', tournaments);
       return tournaments;
     } catch (error) {
       console.error('❌ Error getting tournaments:', error);
@@ -618,10 +587,8 @@ export class TournamentService {
   // Eliminar torneo
   static async deleteTournament(tournamentId: string): Promise<void> {
     try {
-      console.log('🗑️ Eliminando torneo:', tournamentId);
       const tournamentRef = ref(db, `tournaments/${tournamentId}`);
       await remove(tournamentRef);
-      console.log('✅ Torneo eliminado exitosamente');
     } catch (error) {
       console.error('❌ Error deleting tournament:', error);
       throw error;
@@ -638,7 +605,6 @@ export class TournamentService {
     team2Score: number = 0
   ): Promise<void> {
     try {
-      console.log('🔄 Agregando resultado manual:', { tournamentId, team1, team2, result, team1Score, team2Score });
       
       const tournament = await this.getTournament(tournamentId);
       if (!tournament) throw new Error('Tournament not found');
@@ -720,7 +686,6 @@ export class TournamentService {
 
       await update(tournamentRef, updateData);
 
-      console.log('✅ Resultado agregado exitosamente');
     } catch (error) {
       console.error('❌ Error adding match result:', error);
       throw error;
@@ -730,7 +695,6 @@ export class TournamentService {
   // Crear partido de desempate
   static async createTiebreaker(tournamentId: string, teams: string[]): Promise<void> {
     try {
-      console.log('🥊 Creando partido de desempate:', { tournamentId, teams });
       
       const tournament = await this.getTournament(tournamentId);
       if (!tournament) throw new Error('Tournament not found');
@@ -761,7 +725,6 @@ export class TournamentService {
         status: tournament.status
       });
 
-      console.log('✅ Partido de desempate creado exitosamente');
     } catch (error) {
       console.error('❌ Error creating tiebreaker:', error);
       throw error;
@@ -773,8 +736,6 @@ export class TournamentService {
   // Crear torneo básico (solo con nombre)
   static async createBasicTournament(name: string): Promise<string> {
     try {
-      console.log('🔄 Realtime DB: Creando torneo básico...');
-      console.log('📋 Nombre del torneo:', name);
       
       // Crear referencia para un nuevo torneo
       const tournamentsRef = ref(db, 'tournaments');
@@ -799,12 +760,10 @@ export class TournamentService {
         customMatchOrder: true
       };
 
-      console.log('🚀 Guardando torneo básico en Realtime Database con ID:', tournamentId);
       
       // Guardar el torneo
       await set(newTournamentRef, tournamentData);
 
-      console.log('✅ Torneo básico creado exitosamente en Realtime Database!');
       return tournamentId;
     } catch (error) {
       console.error('❌ Error creating basic tournament:', error);
@@ -820,7 +779,6 @@ export class TournamentService {
     config: TournamentConfig
   ): Promise<string> {
     try {
-      console.log('🔄 Agregando fecha al torneo:', { tournamentId, dateName, teams, config });
       
       const tournament = await this.getTournament(tournamentId);
       if (!tournament) throw new Error('Tournament not found');
@@ -872,7 +830,6 @@ export class TournamentService {
         status: 'active' as TournamentStatus
       });
 
-      console.log('✅ Fecha agregada exitosamente');
       return dateId;
     } catch (error) {
       console.error('❌ Error adding tournament date:', error);
@@ -883,7 +840,6 @@ export class TournamentService {
   // Obtener fechas de un torneo
   static async getTournamentDates(tournamentId: string): Promise<TournamentDate[]> {
     try {
-      console.log('🔍 Obteniendo fechas del torneo:', tournamentId);
       const datesRef = ref(db, `tournament-dates/${tournamentId}`);
       const snapshot = await get(datesRef);
 
@@ -912,7 +868,6 @@ export class TournamentService {
         return aTime - bTime;
       });
 
-      console.log('✅ Fechas obtenidas:', dates);
       return dates;
     } catch (error) {
       console.error('❌ Error getting tournament dates:', error);
@@ -928,7 +883,6 @@ export class TournamentService {
     team2: string
   ): Promise<void> {
     try {
-      console.log('🔄 Agregando partido a fecha:', { tournamentId, dateId, team1, team2 });
       
       // Obtener la fecha
       const dateRef = ref(db, `tournament-dates/${tournamentId}/${dateId}`);
@@ -970,7 +924,6 @@ export class TournamentService {
         totalMatches: updatedMatches.length
       });
 
-      console.log('✅ Partido agregado a la fecha exitosamente');
     } catch (error) {
       console.error('❌ Error adding match to date:', error);
       throw error;
@@ -986,7 +939,6 @@ export class TournamentService {
     block: number
   ): Promise<void> {
     try {
-      console.log('🔄 Agregando partido con bloque a fecha:', { tournamentId, dateId, team1, team2, block });
       
       // Obtener la fecha
       const dateRef = ref(db, `tournament-dates/${tournamentId}/${dateId}`);
@@ -1028,7 +980,6 @@ export class TournamentService {
         totalMatches: updatedMatches.length
       });
 
-      console.log('✅ Partido con bloque agregado a la fecha exitosamente');
     } catch (error) {
       console.error('❌ Error adding match with block to date:', error);
       throw error;
@@ -1042,7 +993,6 @@ export class TournamentService {
     matchIds: string[]
   ): Promise<void> {
     try {
-      console.log('🔒 Bloqueando partidos en fecha:', { tournamentId, dateId, matchIds });
       
       // Obtener la fecha
       const dateRef = ref(db, `tournament-dates/${tournamentId}/${dateId}`);
@@ -1066,7 +1016,6 @@ export class TournamentService {
         matches: updatedMatches
       });
 
-      console.log('✅ Partidos bloqueados exitosamente');
     } catch (error) {
       console.error('❌ Error locking matches in date:', error);
       throw error;
@@ -1076,7 +1025,6 @@ export class TournamentService {
   // Cerrar fecha (no permitir más cambios)
   static async closeTournamentDate(tournamentId: string, dateId: string): Promise<void> {
     try {
-      console.log('🔒 Cerrando fecha del torneo:', { tournamentId, dateId });
       
       const dateRef = ref(db, `tournament-dates/${tournamentId}/${dateId}`);
       const dateSnapshot = await get(dateRef);
@@ -1099,7 +1047,6 @@ export class TournamentService {
         closedAt: serverTimestamp()
       });
 
-      console.log('✅ Fecha cerrada exitosamente');
     } catch (error) {
       console.error('❌ Error closing tournament date:', error);
       throw error;
@@ -1116,9 +1063,6 @@ export class TournamentService {
     team2Score: number = 0
   ): Promise<void> {
     try {
-      console.log('🔄 Actualizando resultado del partido en fecha:', { 
-        tournamentId, dateId, matchId, result, team1Score, team2Score 
-      });
       
       // Obtener la fecha
       const dateRef = ref(db, `tournament-dates/${tournamentId}/${dateId}`);
@@ -1185,7 +1129,6 @@ export class TournamentService {
         teams: updatedTeams
       });
 
-      console.log('✅ Resultado del partido actualizado en fecha específica');
     } catch (error) {
       console.error('❌ Error updating match result in date:', error);
       throw error;

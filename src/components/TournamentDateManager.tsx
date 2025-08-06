@@ -18,7 +18,13 @@ export const TournamentDateManager: React.FC<TournamentDateManagerProps> = ({
   const sortedDates = [...dates].sort((a, b) => {
     // Primero ordenar por fecha de creación (más reciente primero)
     if (a.createdAt && b.createdAt) {
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      const timeA = typeof a.createdAt === 'object' && 'seconds' in a.createdAt 
+        ? (a.createdAt.seconds as number) * 1000 
+        : new Date(a.createdAt as string).getTime();
+      const timeB = typeof b.createdAt === 'object' && 'seconds' in b.createdAt 
+        ? (b.createdAt.seconds as number) * 1000 
+        : new Date(b.createdAt as string).getTime();
+      return timeB - timeA;
     }
     // Si no hay fecha de creación, usar el ID como fallback (mayor ID = más reciente)
     return b.id.localeCompare(a.id);
@@ -28,7 +34,6 @@ export const TournamentDateManager: React.FC<TournamentDateManagerProps> = ({
   const [newDateName, setNewDateName] = useState('');
   const [newDateTeams, setNewDateTeams] = useState<string[]>(['', '']);
   const [newDateType, setNewDateType] = useState<'points' | 'wins'>('points');
-  const [numBlocks, setNumBlocks] = useState(1);
   const [editingMatch, setEditingMatch] = useState<string | null>(null);
   const [team1Score, setTeam1Score] = useState<number>(0);
   const [team2Score, setTeam2Score] = useState<number>(0);
@@ -250,17 +255,10 @@ export const TournamentDateManager: React.FC<TournamentDateManagerProps> = ({
         });
       });
       
-      console.log(`🔄 Replicando ${allMatches.length} partidos del Bloque ${maxBlock} en Bloque ${nextBlock}`);
-      console.log(`🔒 Se bloquearon ${existingMatches.length} partidos anteriores`);
-      console.log(`📋 Enfrentamientos mantenidos: ${allMatches.map(m => `${m.team1} vs ${m.team2}`).join(', ')}`);
     } else {
       // Primera vez: generar fixture nuevo
       const blockMatches = generateRoundRobinMatches(teams, nextBlock);
       allMatches.push(...blockMatches);
-      
-      console.log(`🎯 Fixture generado para ${teams.length} equipos:`, teams);
-      console.log(`📅 Bloque: ${nextBlock}`);
-      console.log(`⚽ Total de partidos nuevos: ${allMatches.length}`);
     }
     
     // Verificar que no haya duplicados en el nuevo bloque
@@ -280,20 +278,8 @@ export const TournamentDateManager: React.FC<TournamentDateManagerProps> = ({
     
     if (duplicates.length > 0) {
       console.error('🚫 DUPLICADOS ENCONTRADOS:', duplicates);
-    } else {
-      console.log('✅ Sin duplicados - Fixture correcto');
     }
     
-    // Mostrar fixture detallado por rondas
-    const roundGroups = allMatches.reduce((acc, match) => {
-      if (!acc[match.round]) acc[match.round] = [];
-      acc[match.round].push(`${match.team1} vs ${match.team2}`);
-      return acc;
-    }, {} as Record<number, string[]>);
-    
-    Object.keys(roundGroups).sort().forEach(round => {
-      console.log(`📅 Ronda ${round}:`, roundGroups[Number(round)].join(', '));
-    });
     
     // Crear todos los partidos nuevos en el orden balanceado
     for (const match of allMatches) {
@@ -305,7 +291,6 @@ export const TournamentDateManager: React.FC<TournamentDateManagerProps> = ({
   const lockExistingMatches = async (dateId: string, existingMatches: Match[]) => {
     const matchIds = existingMatches.map(match => match.id);
     await lockMatchesInDate(tournamentId, dateId, matchIds);
-    console.log(`🔒 ${existingMatches.length} partidos bloqueados exitosamente`);
   };
 
   const handleScoreSubmit = async (match: Match) => {
@@ -455,25 +440,6 @@ export const TournamentDateManager: React.FC<TournamentDateManagerProps> = ({
                 </div>
               </div>
 
-              {/* Number of Blocks */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Número de Bloques (Rondas)
-                </label>
-                <div className="flex items-center space-x-4">
-                  <input
-                    type="number"
-                    min="1"
-                    max="10"
-                    value={numBlocks}
-                    onChange={(e) => setNumBlocks(parseInt(e.target.value) || 1)}
-                    className="w-24 px-3 py-2 rounded-lg border-2 border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200"
-                  />
-                  <div className="text-sm text-gray-600">
-                    Cada bloque repite el mismo fixture (todos vs todos)
-                  </div>
-                </div>
-              </div>
 
               {/* Teams for this date */}
               <div>

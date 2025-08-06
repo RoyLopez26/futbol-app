@@ -64,22 +64,19 @@ export const TournamentProvider: React.FC<TournamentProviderProps> = ({ children
     name: string, 
     teamNames: string[], 
     config: TournamentConfig
-  ): Promise<void> => {
-    console.log('🎯 Context: Iniciando creación de torneo', { name, teamNames, config });
+  ): Promise<string> => {
     dispatch({ type: 'SET_LOADING', payload: true });
     try {
-      console.log('🔄 Context: Llamando a TournamentService.createTournament');
       const tournamentId = await TournamentService.createTournament(name, teamNames, config);
-      console.log('✅ Context: Torneo creado con ID:', tournamentId);
-      
-      console.log('🔄 Context: Cargando torneo creado...');
+
       const tournament = await TournamentService.getTournament(tournamentId);
-      console.log('✅ Context: Torneo cargado:', tournament);
-      
+
       dispatch({ type: 'SET_TOURNAMENT', payload: tournament });
+      
+      return tournamentId;
     } catch (error) {
-      console.error('❌ Context: Error creando torneo:', error);
       dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : 'Unknown error' });
+      throw error;
     }
   };
 
@@ -88,14 +85,17 @@ export const TournamentProvider: React.FC<TournamentProviderProps> = ({ children
     teamNames: string[], 
     matches: MatchPairing[], 
     config: TournamentConfig
-  ): Promise<void> => {
+  ): Promise<string> => {
     dispatch({ type: 'SET_LOADING', payload: true });
     try {
       const tournamentId = await TournamentService.createCustomTournament(name, teamNames, matches, config);
       const tournament = await TournamentService.getTournament(tournamentId);
       dispatch({ type: 'SET_TOURNAMENT', payload: tournament });
+      
+      return tournamentId;
     } catch (error) {
       dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : 'Unknown error' });
+      throw error;
     }
   };
 
@@ -164,19 +164,14 @@ export const TournamentProvider: React.FC<TournamentProviderProps> = ({ children
   const loadTournamentHistory = async (): Promise<void> => {
     // Si ya está cargando, no hacer nada
     if (state.loading) {
-      console.log('⏳ Context: Ya se está cargando historial, saltando...');
       return;
     }
     
-    console.log('📚 Context: Cargando historial de torneos...');
     dispatch({ type: 'SET_LOADING', payload: true });
     try {
-      console.log('🔄 Context: Llamando a TournamentService.getAllTournaments');
       const tournaments = await TournamentService.getAllTournaments();
-      console.log('✅ Context: Historial cargado:', tournaments);
       dispatch({ type: 'SET_TOURNAMENTS', payload: tournaments });
     } catch (error) {
-      console.error('❌ Context: Error cargando historial:', error);
       dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : 'Unknown error' });
     }
   };
@@ -211,20 +206,14 @@ export const TournamentProvider: React.FC<TournamentProviderProps> = ({ children
     teamNames: string[], 
     config: TournamentConfig
   ): Promise<void> => {
-    console.log('🎯 Context: Creando torneo manual', { name, teamNames, config });
     dispatch({ type: 'SET_LOADING', payload: true });
     try {
-      console.log('🔄 Context: Llamando a TournamentService.createManualTournament');
       const tournamentId = await TournamentService.createManualTournament(name, teamNames, config);
-      console.log('✅ Context: Torneo manual creado con ID:', tournamentId);
-      
-      console.log('🔄 Context: Cargando torneo creado...');
+
       const tournament = await TournamentService.getTournament(tournamentId);
-      console.log('✅ Context: Torneo cargado:', tournament);
-      
+
       dispatch({ type: 'SET_TOURNAMENT', payload: tournament });
     } catch (error) {
-      console.error('❌ Context: Error creando torneo manual:', error);
       dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : 'Unknown error' });
     }
   };
@@ -238,14 +227,12 @@ export const TournamentProvider: React.FC<TournamentProviderProps> = ({ children
   ): Promise<void> => {
     if (!state.tournament) return;
     
-    console.log('🎯 Context: Agregando resultado de partido', { team1, team2, result, team1Score, team2Score });
     dispatch({ type: 'SET_LOADING', payload: true });
     try {
       await TournamentService.addMatchResult(state.tournament.id, team1, team2, result, team1Score, team2Score);
       const updatedTournament = await TournamentService.getTournament(state.tournament.id);
       dispatch({ type: 'SET_TOURNAMENT', payload: updatedTournament });
     } catch (error) {
-      console.error('❌ Context: Error agregando resultado:', error);
       dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : 'Unknown error' });
     }
   };
@@ -269,22 +256,19 @@ export const TournamentProvider: React.FC<TournamentProviderProps> = ({ children
 
   // ===================== NUEVOS MÉTODOS PARA SISTEMA DE FECHAS =====================
 
-  const createBasicTournament = async (name: string): Promise<void> => {
-    console.log('🎯 Context: Creando torneo básico', { name });
+  const createBasicTournament = async (name: string): Promise<string> => {
     dispatch({ type: 'SET_LOADING', payload: true });
     try {
-      console.log('🔄 Context: Llamando a TournamentService.createBasicTournament');
       const tournamentId = await TournamentService.createBasicTournament(name);
-      console.log('✅ Context: Torneo básico creado con ID:', tournamentId);
-      
-      console.log('🔄 Context: Cargando torneo creado...');
+
       const tournament = await TournamentService.getTournamentWithDates(tournamentId);
-      console.log('✅ Context: Torneo cargado:', tournament);
-      
+
       dispatch({ type: 'SET_TOURNAMENT', payload: tournament });
+      
+      return tournamentId;
     } catch (error) {
-      console.error('❌ Context: Error creando torneo básico:', error);
       dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : 'Unknown error' });
+      throw error;
     }
   };
 
@@ -294,45 +278,39 @@ export const TournamentProvider: React.FC<TournamentProviderProps> = ({ children
     teams: string[], 
     config: TournamentConfig
   ): Promise<void> => {
-    console.log('🎯 Context: Agregando fecha al torneo', { tournamentId, dateName, teams, config });
     dispatch({ type: 'SET_LOADING', payload: true });
     try {
       await TournamentService.addTournamentDate(tournamentId, dateName, teams, config);
       const updatedTournament = await TournamentService.getTournamentWithDates(tournamentId);
       dispatch({ type: 'SET_TOURNAMENT', payload: updatedTournament });
     } catch (error) {
-      console.error('❌ Context: Error agregando fecha:', error);
       dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : 'Unknown error' });
     }
   };
 
   const closeTournamentDate = async (tournamentId: string, dateId: string): Promise<void> => {
-    console.log('🎯 Context: Cerrando fecha del torneo', { tournamentId, dateId });
     dispatch({ type: 'SET_LOADING', payload: true });
     try {
       await TournamentService.closeTournamentDate(tournamentId, dateId);
       const updatedTournament = await TournamentService.getTournamentWithDates(tournamentId);
       dispatch({ type: 'SET_TOURNAMENT', payload: updatedTournament });
     } catch (error) {
-      console.error('❌ Context: Error cerrando fecha:', error);
       dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : 'Unknown error' });
     }
   };
 
   const updateTournamentDate = async (
     tournamentId: string, 
-    dateId: string, 
-    teams?: string[], 
-    config?: TournamentConfig
+    _dateId: string, 
+    _teams?: string[], 
+    _config?: TournamentConfig
   ): Promise<void> => {
-    console.log('🎯 Context: Actualizando fecha del torneo', { tournamentId, dateId, teams, config });
     dispatch({ type: 'SET_LOADING', payload: true });
     try {
       // Por ahora simplemente recargamos el torneo, en el futuro podríamos implementar updateTournamentDate en el service
       const updatedTournament = await TournamentService.getTournamentWithDates(tournamentId);
       dispatch({ type: 'SET_TOURNAMENT', payload: updatedTournament });
     } catch (error) {
-      console.error('❌ Context: Error actualizando fecha:', error);
       dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : 'Unknown error' });
     }
   };
@@ -343,14 +321,12 @@ export const TournamentProvider: React.FC<TournamentProviderProps> = ({ children
     team1: string, 
     team2: string
   ): Promise<void> => {
-    console.log('🎯 Context: Agregando partido a fecha', { tournamentId, dateId, team1, team2 });
     dispatch({ type: 'SET_LOADING', payload: true });
     try {
       await TournamentService.addMatchToDate(tournamentId, dateId, team1, team2);
       const updatedTournament = await TournamentService.getTournamentWithDates(tournamentId);
       dispatch({ type: 'SET_TOURNAMENT', payload: updatedTournament });
     } catch (error) {
-      console.error('❌ Context: Error agregando partido a fecha:', error);
       dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : 'Unknown error' });
     }
   };
@@ -362,14 +338,12 @@ export const TournamentProvider: React.FC<TournamentProviderProps> = ({ children
     team2: string,
     block: number
   ): Promise<void> => {
-    console.log('🎯 Context: Agregando partido con bloque a fecha', { tournamentId, dateId, team1, team2, block });
     dispatch({ type: 'SET_LOADING', payload: true });
     try {
       await TournamentService.addMatchToDateWithBlock(tournamentId, dateId, team1, team2, block);
       const updatedTournament = await TournamentService.getTournamentWithDates(tournamentId);
       dispatch({ type: 'SET_TOURNAMENT', payload: updatedTournament });
     } catch (error) {
-      console.error('❌ Context: Error agregando partido con bloque a fecha:', error);
       dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : 'Unknown error' });
     }
   };
@@ -379,14 +353,12 @@ export const TournamentProvider: React.FC<TournamentProviderProps> = ({ children
     dateId: string,
     matchIds: string[]
   ): Promise<void> => {
-    console.log('🔒 Context: Bloqueando partidos en fecha', { tournamentId, dateId, matchIds });
     dispatch({ type: 'SET_LOADING', payload: true });
     try {
       await TournamentService.lockMatchesInDate(tournamentId, dateId, matchIds);
       const updatedTournament = await TournamentService.getTournamentWithDates(tournamentId);
       dispatch({ type: 'SET_TOURNAMENT', payload: updatedTournament });
     } catch (error) {
-      console.error('❌ Context: Error bloqueando partidos:', error);
       dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : 'Unknown error' });
     }
   };

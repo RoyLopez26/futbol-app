@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTournament } from '../context/TournamentContext';
 import type { TournamentConfig, MatchPairing, TournamentType } from '../types/tournament';
 
@@ -9,8 +10,9 @@ export const TournamentSetupAdvanced: React.FC = () => {
     validateTournament, 
     generateAllMatches, 
     loading, 
-    error 
+    error
   } = useTournament();
+  const navigate = useNavigate();
 
   const [tournamentName, setTournamentName] = useState('');
   const [teamCount, setTeamCount] = useState<3 | 4>(3);
@@ -107,10 +109,19 @@ export const TournamentSetupAdvanced: React.FC = () => {
 
     const trimmedNames = teamNames.map(name => name.trim());
 
-    if (customMatches) {
-      await createCustomTournament(tournamentName.trim(), trimmedNames, matches, config);
-    } else {
-      await createTournament(tournamentName.trim(), trimmedNames, config);
+    try {
+      let tournamentId: string;
+      
+      if (customMatches) {
+        tournamentId = await createCustomTournament(tournamentName.trim(), trimmedNames, matches, config);
+      } else {
+        tournamentId = await createTournament(tournamentName.trim(), trimmedNames, config);
+      }
+      
+      // Redirigir a fechas después de crear el torneo
+      navigate(`/tournament/${tournamentId}/dates`);
+    } catch (error) {
+      console.error('Error creating tournament:', error);
     }
   };
 

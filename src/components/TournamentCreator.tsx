@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTournament } from '../context/TournamentContext';
 import type { TournamentConfig, TournamentType } from '../types/tournament';
 
 export const TournamentCreator: React.FC = () => {
   const { createTournament, loading, error } = useTournament();
+  const navigate = useNavigate();
   
   const [currentStep, setCurrentStep] = useState(1);
   const [tournamentName, setTournamentName] = useState('');
@@ -47,7 +49,14 @@ export const TournamentCreator: React.FC = () => {
     };
 
     const trimmedNames = teamNames.map(name => name.trim());
-    await createTournament(tournamentName.trim(), trimmedNames, config);
+    try {
+      const tournamentId = await createTournament(tournamentName.trim(), trimmedNames, config);
+      
+      // Redirigir a fechas después de crear el torneo
+      navigate(`/tournament/${tournamentId}/dates`);
+    } catch (error) {
+      console.error('Error creating tournament:', error);
+    }
   };
 
   const getTournamentTypeIcon = (type: TournamentType) => {
